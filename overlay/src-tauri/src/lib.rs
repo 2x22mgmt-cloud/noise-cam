@@ -4,12 +4,16 @@
 // injected into cs2.exe; the UI talks to the Node relay over WebSocket, exactly
 // like the browser panel does.
 
+mod relay;
+
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(relay::HlaeState::default())
+        .invoke_handler(tauri::generate_handler![relay::hlae_send])
         .setup(|app| {
             // Global hotkey: Alt+Shift+D ("dolly") shows/hides the overlay.
             // Chosen to avoid clashing with common CS2 binds. Edit here.
@@ -35,6 +39,10 @@ pub fn run() {
                 )?;
                 app.global_shortcut().register(toggle)?;
             }
+
+            // Start the built-in WebSocket relay the HLAE bridge connects to.
+            let hlae_state = app.state::<relay::HlaeState>().inner().clone();
+            relay::start(app.handle().clone(), hlae_state);
 
             // Dock the panel to the top-right corner on launch.
             if let Some(win) = app.get_webview_window("main") {
