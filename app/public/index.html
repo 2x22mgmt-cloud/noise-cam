@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>CS2 Dolly</title>
+	<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+	<header>
+		<div class="brand">CS2&nbsp;<span>Dolly</span></div>
+		<div class="status" id="status">
+			<span class="dot" id="statusDot"></span>
+			<span id="statusText">connecting…</span>
+		</div>
+	</header>
+
+	<main>
+		<!-- LIVE READOUT -->
+		<section class="card live">
+			<div class="readout">
+				<div><label>tick</label><b id="rTick">–</b></div>
+				<div><label>time</label><b id="rTime">–</b></div>
+				<div><label>fov</label><b id="rFov">–</b></div>
+				<div><label>state</label><b id="rState">–</b></div>
+			</div>
+			<div class="readout small">
+				<div><label>pos</label><b id="rPos">–</b></div>
+				<div><label>ang</label><b id="rAng">–</b></div>
+			</div>
+		</section>
+
+		<!-- CAPTURE -->
+		<section class="card">
+			<h2>Campath</h2>
+			<button class="big capture" id="btnCapture">● Capture keyframe</button>
+			<div class="row">
+				<button id="btnEnable" class="toggle">Enable path</button>
+				<button id="btnDraw" class="toggle">Show path</button>
+				<button id="btnClear" class="danger">Clear</button>
+			</div>
+			<div class="row">
+				<input id="pathName" type="text" placeholder="shot name" value="myshot" />
+				<button id="btnSave">Save</button>
+				<button id="btnLoad">Load</button>
+			</div>
+		</section>
+
+		<!-- KEYFRAMES -->
+		<section class="card">
+			<h2>Keyframes <span class="muted" id="kfCount">(0)</span></h2>
+			<div class="kf-head"><span>#</span><span>time</span><span>pos</span><span>fov</span><span>roll</span><span></span></div>
+			<div id="kfList" class="kf-list"><div class="empty">No keyframes yet — fly the cam and hit Capture.</div></div>
+		</section>
+
+		<!-- TRANSPORT -->
+		<section class="card">
+			<h2>Transport</h2>
+			<div class="row">
+				<button id="btnPause">⏸ Pause</button>
+				<button id="btnResume">▶ Resume</button>
+			</div>
+			<div class="row">
+				<input id="gotoTick" type="number" placeholder="tick" />
+				<button id="btnGoto">Go to tick</button>
+			</div>
+			<div class="row">
+				<label class="rowlabel">speed</label>
+				<button data-ts="0.01" class="ts">0.01×</button>
+				<button data-ts="0.1" class="ts">0.1×</button>
+				<button data-ts="0.25" class="ts">0.25×</button>
+				<button data-ts="0.5" class="ts">0.5×</button>
+				<button data-ts="1" class="ts">1×</button>
+			</div>
+		</section>
+
+		<!-- MACROS -->
+		<section class="card">
+			<h2>Macros</h2>
+			<div class="grid">
+				<button data-macro="setup">🎬 Scene setup</button>
+				<button data-macro="cam">🎥 Camera mode</button>
+				<button data-macro="dofon">🔵 DoF on</button>
+				<button data-macro="dofoff">⚪ DoF off</button>
+				<button data-cmd="mirv_input fov 35">FOV 35</button>
+				<button data-cmd="mirv_input fov 55">FOV 55</button>
+				<button data-cmd="mirv_input fov 75">FOV 75</button>
+				<button data-cmd="mirv_fix animations 1">Fix anims</button>
+			</div>
+			<div class="row">
+				<input id="blockName" type="text" placeholder="your name" value="xTrace" />
+				<button id="btnBlock">Block other kills</button>
+			</div>
+			<details class="dof">
+				<summary>Depth of field</summary>
+				<div class="dof-grid">
+					<label>near crisp <input id="dofNearCrisp" type="number" value="50" /></label>
+					<label>far crisp <input id="dofFarCrisp" type="number" value="200" /></label>
+					<label>near blurry <input id="dofNearBlurry" type="number" value="20" /></label>
+					<label>far blurry <input id="dofFarBlurry" type="number" value="2000" /></label>
+				</div>
+				<button id="btnApplyDof">Apply DoF</button>
+			</details>
+		</section>
+
+		<!-- CONSOLE -->
+		<section class="card">
+			<h2>Console</h2>
+			<div class="row">
+				<input id="rawCmd" type="text" placeholder="any CS2 / HLAE command…" />
+				<button id="btnSend">Send</button>
+			</div>
+			<pre id="log" class="log"></pre>
+		</section>
+	</main>
+
+	<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+drdemoui;sv_cheats 1;mirv_cvar_unhide_all;
+fov_cs_debug 100;
+cl_draw_only_deathnotices 1;
+host_framerate 600 (adjust to your desired frame rate)
+
+all the setting for HLAE 2-
+command line
+ -steam -insecure +sv_lan 1 -console -novid -sw -w 2560 -h 1440 
+(change -w and -h to your monitors size)
+
+HLAE 2 main console commands-
+mirv_input camera
+mirv_campath add
+mirv_campath enable 1
+mirv_campath clear
+
+
+HLAE 2  keybinds
+wasd - moves camera
+arrow keys - turns cameras (also can turn the camera with mouse)
+F/R - moves camera up and down
+Z/C - tilts camera Left and right
+
+
+CS2 replay keybinds/console commands
+tilda (~) -- opens command console
+cl_drawhud false - removes hud
+Shift + F2 - removes bottom display / timeline
+space -- changes camera POV
+r_show_build_info false
+
+demo_togglepause  (whatever key) to have a pause/play button
+
+Fix animations: mirv_fix animations 1
+Focal Length: mirv_input fov 50
+Depth of field settings
+r_dof_override 1
+r_dof_override_near_blurry 300
+r_dof_override_near_crisp 50
+r_dof_override_far_blurry
+r_dof_override_far_crisp 100
+
+CUSTOM MATCH COMMANDS:
+Main Menu = tv_enable true
+In Game = tv_record introcine
+Playback = playdemo introcine
+
+
+
+block othjer kills
+mirv_deathmsg filter add attackerMatch=!xTrace victimMatch=!xTrace block=1 lastRule=1
+
+
+mirv_campath edit position current
+mirv_campath edit angles current
+
+alias start "cl_demo_predict 0;cl_drawhud 0;cl_trueview_show_status 0"
+
+alias cam "mirv_input camera"
+
+alias 01 "demo_timescale 0.1"
+
+alias 001 "demo_timescale 0.01"
+
+alias 1 "demo_timescale 1"
+
+alias add "mirv_campath add"
+
+alias fov35 "mirv_input fov 35"
+
+alias fov55 "mirv_input fov 55"
+
+alias fov75 "mirv_input fov 75"
+
+alias draw "mirv_campath draw enabled 1"
+
+alias enable "mirv_campath enabled 1"
+
+alias cam0 "mirv_campath select #0 #0"
+
+alias cam1 "mirv_campath select #1 #1"
+
+alias cam2 "mirv_campath select #2 #2"
+
+alias cam3 "mirv_campath select #3 #3"
+
+alias cam4 "mirv_campath select #4 #4"
+
+alias cam5 "mirv_campath select #5 #5"
+
+alias del0 "mirv_campath remove 0"
+
+alias del1 "mirv_campath remove 1"
+
+alias del2 "mirv_campath remove 2"
+
+alias del3 "mirv_campath remove 3"
+
+alias del4 "mirv_campath remove 4"
+
+alias del5 "mirv_campath remove 5"
+
+alias cl "mirv_campath clear" 
+
+alias movecam "mirv_campath edit position current;mirv_campath edit angles current
+
+alias rec "exec rec.cfg"
+
+alias block "mirv_deathmsg filter add attackerMatch=!xTrace victimMatch=!xTrace block=1 lastRule=1"
+
+//CONSOLE ALIAS
+alias dc  "disconnect"

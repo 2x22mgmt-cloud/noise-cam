@@ -1,0 +1,4 @@
+# Normalize line endings; keep Windows scripts CRLF
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cfg text eol=crlf

@@ -1,0 +1,13 @@
+{
+  "name": "cs2-dolly-server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Phase 1 hello-bridge WebSocket server for the CS2 dolly editor",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
