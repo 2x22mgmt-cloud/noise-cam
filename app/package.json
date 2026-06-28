@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "CS2 Dolly — real-time camera-path editor UI for HLAE",
+  "description": "Noise Cam — real-time camera-path (dolly) editor UI for HLAE",
   "scripts": {
     "start": "node server.mjs"
   },

@@ -11,13 +11,13 @@ and for CS2."
 ```
 ┌──────────────────────────────┐      WebSocket (localhost:31337)      ┌───────────────────────────┐
 │  Editor                      │  ◀── cam pose, demo tick/time,        │  HLAE bridge               │
-│  Phase 1: Node console        │       entities, events                │  (bridge/dolly-bridge.js)  │
+│  Phase 1: Node console        │       entities, events                │  (bridge/noisecam-bridge.js)  │
 │  Later:   Tauri + React/TS    │  ─── exec, keyframe ops, cvars ────▶  │  runs inside CS2 via        │
 │                               │                                       │  mirv_script_load           │
 └──────────────────────────────┘                                       └───────────────────────────┘
 ```
 
-- **HLAE bridge** (`bridge/dolly-bridge.js`) — runs *inside CS2* through HLAE's JS
+- **HLAE bridge** (`bridge/noisecam-bridge.js`) — runs *inside CS2* through HLAE's JS
   engine. Reads the live camera + demo time, manipulates the campath, runs console
   commands / sets cvars. This is the only part that touches the game, and it does so
   through HLAE's official API.

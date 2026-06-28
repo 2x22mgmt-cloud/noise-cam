@@ -1,10 +1,11 @@
 // =============================================================================
-//  CS2 Dolly Editor — HLAE bridge (Phase 2: capture & apply)
+//  Noise Cam — HLAE bridge (Phase 2: capture & apply)
 // =============================================================================
 //  Runs INSIDE CS2 via HLAE's sanctioned mirv-script engine. No injection.
 //
-//  Load it in the CS2 console (CS2 launched through HLAE):
-//      mirv_script_load "C:\Users\User\Downloads\cs2-dolly\bridge\dolly-bridge.mjs"
+//  Load it in the CS2 console (CS2 launched through HLAE) — adjust the path to
+//  wherever this repo lives on your machine:
+//      mirv_script_load "C:\Users\User\Downloads\Transfer-to-CA\Projects\cs2-dolly\bridge\noisecam-bridge.js"
 //
 //  What it does:
 //    - streams the live camera pose + demo time/tick to the editor (every frame)
@@ -282,7 +283,7 @@ const dollyCmd = new AdvancedfxConCommand((args) => {
 		default: mirv.message('[dolly] usage: mirv_dolly capture|clear|enable|disable|draw|drawoff');
 	}
 });
-try { dollyCmd.register('mirv_dolly', 'CS2 Dolly editor commands'); }
+try { dollyCmd.register('mirv_dolly', 'Noise Cam editor commands'); }
 catch (e) { mirv.warning('[dolly] command register failed: ' + e); }
 
 // --- Expose cleanup so re-loading the script is safe ------------------------

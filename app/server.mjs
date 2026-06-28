@@ -1,5 +1,5 @@
 // =============================================================================
-//  CS2 Dolly — app server (Phase 3: GUI)
+//  Noise Cam — app server (Phase 3: GUI)
 // =============================================================================
 //  One process that:
 //    1. serves the web UI (public/) over HTTP
@@ -7,7 +7,7 @@
 //    3. accepts the browser UI on   ws://localhost:31337/ui
 //    4. relays messages between them (cam/keyframes -> UI, commands -> HLAE)
 //
-//  Run:  npm install  &&  npm start     (or double-click ..\Dolly.bat)
+//  Run:  npm install  &&  npm start     (or double-click ..\NoiseCam.bat)
 //  Then your browser opens http://localhost:31337 automatically.
 // =============================================================================
 
@@ -93,12 +93,12 @@ wssUi.on('connection', (ws) => {
 httpServer.listen(PORT, () => {
 	const url = `http://localhost:${PORT}`;
 	console.log('========================================================');
-	console.log('  CS2 Dolly');
+	console.log('  Noise Cam');
 	console.log(`  UI:            ${url}`);
 	console.log(`  HLAE endpoint: ws://localhost:${PORT}/mirv`);
 	console.log('========================================================');
 	console.log('In CS2 (via HLAE) run:');
-	console.log(`  mirv_script_load "${path.join(__dirname, '..', 'bridge', 'dolly-bridge.js')}"`);
+	console.log(`  mirv_script_load "${path.join(__dirname, '..', 'bridge', 'noisecam-bridge.js')}"`);
 	console.log('Opening the UI in your browser...  (Ctrl+C here to quit)\n');
 	if (process.platform === 'win32') {
 		try { exec(`start "" "${url}"`); } catch (_) {}
