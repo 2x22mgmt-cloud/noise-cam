@@ -7,7 +7,7 @@ read/write, and custom console commands — all sanctioned, no injection. See HL
 
 ## Phase 1 — Hello-bridge ✅ BUILT (awaiting live test in CS2)
 Prove the round trip end to end.
-- `bridge/dolly-bridge.js` streams camera + demo tick to the editor every frame and
+- `bridge/noisecam-bridge.js` streams camera + demo tick to the editor every frame and
   runs `exec` commands sent back.
 - `server/server.mjs` prints the live stream and forwards typed commands.
 - Editor-side round trip **verified without CS2** (simulated client, both directions OK).
@@ -31,7 +31,7 @@ The first interactive value.
 - `app/` — Node server serves the web UI (`app/public/`) and relays browser ↔ CS2.
 - Control panel: live readout, capture/enable/draw/clear, save/load, keyframe list
   (go/delete), transport (pause/resume/gototick/timescale), macros, raw console.
-- `Dolly.bat` one-click launcher (auto-opens browser). Bridge unchanged.
+- `NoiseCam.bat` one-click launcher (auto-opens browser). Bridge unchanged.
 - Verified: renders clean, no console errors, /ui relay works. Live CS2 test pending.
 
 ## Phase 3.5 — React rebuild (planned, AFTER smoke-testing vanilla v1)

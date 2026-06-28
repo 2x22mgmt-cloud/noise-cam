@@ -1,9 +1,9 @@
 // =============================================================================
-//  CS2 Dolly Editor — editor-side server (Phase 2: capture & apply)
+//  Noise Cam — editor-side server (Phase 2: capture & apply)
 // =============================================================================
 //  Run with:   npm start     (or double-click ..\start-server.bat)
 //
-//  HLAE (running dolly-bridge.js inside CS2) connects OUT to this server.
+//  HLAE (running noisecam-bridge.js inside CS2) connects OUT to this server.
 //  This console build lets you build a campath without alt-tabbing into CS2:
 //    - shows the live camera + demo tick/time
 //    - shows the live keyframe list (auto-updates when the path changes)
@@ -24,7 +24,7 @@ const clients = new Set();
 let lastPrint = 0;
 
 console.log(`[dolly-server] listening on ws://localhost:${PORT}${PATH}`);
-console.log('[dolly-server] In CS2 (via HLAE): mirv_script_load "C:\\Users\\User\\Downloads\\cs2-dolly\\bridge\\dolly-bridge.js"');
+console.log('[dolly-server] In CS2 (via HLAE): mirv_script_load "C:\\Users\\User\\Downloads\\Transfer-to-CA\\Projects\\cs2-dolly\\bridge\\noisecam-bridge.js"');
 console.log('[dolly-server] Commands:');
 console.log('    capture            drop a keyframe at the current view + demo time');
 console.log('    list               re-print the keyframe list');

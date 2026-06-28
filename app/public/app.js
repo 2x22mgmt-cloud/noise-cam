@@ -1,4 +1,4 @@
-// CS2 Dolly — browser UI logic. Talks to app/server.mjs over /ui,
+// Noise Cam — browser UI logic. Talks to app/server.mjs over /ui,
 // which relays to the HLAE bridge running inside CS2.
 
 const TICKRATE = 64; // CS2 demos

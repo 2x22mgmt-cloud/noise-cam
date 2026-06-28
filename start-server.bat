@@ -1,5 +1,5 @@
 @echo off
-title CS2 Dolly - editor server (Phase 1)
+title Noise Cam - editor server (Phase 1)
 cd /d "%~dp0server"
 where node >nul 2>nul
 if errorlevel 1 (
@@ -14,7 +14,7 @@ if not exist node_modules (
 )
 echo.
 echo ================================================
-echo  CS2 Dolly editor server
+echo  Noise Cam editor server
 echo  Leave this window OPEN. Type a console command
 echo  + Enter to run it in-game. Ctrl+C to stop.
 echo ================================================
