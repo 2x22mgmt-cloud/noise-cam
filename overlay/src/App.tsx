@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useBridge, TICKRATE, type Bridge, type Keyframe } from "./useBridge";
-import { fmtFocal, focalToFov } from "./lens";
+import { fmtFocal, fovToFocal, focalToFov } from "./lens";
+import { computeDof, F_STOPS } from "./dof";
 
 const f = (n: unknown, d = 1) =>
   typeof n === "number" && isFinite(n) ? n.toFixed(d) : "–";
@@ -319,37 +320,79 @@ function Row({ label, value }: { label: string; value: string }) {
 
 /* ------------------------------------------------------------------- DoF */
 function DofTab({ b }: { b: Bridge }) {
-  const [d, setD] = useState({ nc: "50", fc: "200", nb: "20", fb: "2000" });
+  // Focal length comes from the live lens (FOV); fall back to 50mm if no stream.
+  const focalMm = fovToFocal(b.cam?.view?.fov) ?? 50;
+  const [focus, setFocus] = useState("512");
+  const [fstop, setFstop] = useState(2.8);
+
+  const focusN = Math.max(Number(focus) || 0, 0);
+  const p = computeDof(focusN, fstop, focalMm);
+  const r = (n: number) => Math.round(n);
+
   const apply = () =>
     b.exec(
-      `r_dof_override 1;r_dof_override_near_crisp ${d.nc};r_dof_override_far_crisp ${d.fc};r_dof_override_near_blurry ${d.nb};r_dof_override_far_blurry ${d.fb}`,
+      `r_dof_override 1;` +
+        `r_dof_override_near_blurry ${r(p.nearBlurry)};` +
+        `r_dof_override_near_crisp ${r(p.nearCrisp)};` +
+        `r_dof_override_far_crisp ${r(p.farCrisp)};` +
+        `r_dof_override_far_blurry ${r(p.farBlurry)}`,
     );
-  const field = (key: keyof typeof d, label: string) => (
-    <label className="flex flex-col gap-1 text-[11px] text-muted">
-      {label}
-      <input
-        className={input}
-        type="number"
-        value={d[key]}
-        onChange={(e) => setD({ ...d, [key]: e.target.value })}
-      />
-    </label>
-  );
+
+  const farTxt = (n: number) => (n >= 100000 ? "∞" : String(r(n)));
+
   return (
-    <div className="space-y-2.5">
-      <div className="grid grid-cols-2 gap-2">
-        {field("nc", "near crisp")}
-        {field("fc", "far crisp")}
-        {field("nb", "near blurry")}
-        {field("fb", "far blurry")}
+    <div className="space-y-3">
+      {/* focus distance */}
+      <div>
+        <div className="mb-1 flex items-center justify-between px-0.5 text-[11px] text-muted">
+          <span>focus distance</span>
+          <span className="font-mono text-text">{r(focusN)} u</span>
+        </div>
+        <input
+          type="range"
+          min={16}
+          max={4000}
+          step={4}
+          value={focusN}
+          onChange={(e) => setFocus(e.target.value)}
+          className="w-full accent-[var(--color-accent)]"
+        />
       </div>
+
+      {/* aperture */}
+      <div>
+        <div className="mb-1 px-0.5 text-[11px] text-muted">aperture · shallower ← → deeper</div>
+        <div className="grid grid-cols-4 gap-1">
+          {F_STOPS.map((n) => (
+            <button
+              key={n}
+              onClick={() => setFstop(n)}
+              className={`${btn} ${fstop === n ? btnActive : ""}`}
+            >
+              f/{n}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-1.5">
         <button className={`${btn} ${btnActive}`} onClick={apply}>🔵 Apply DoF</button>
         <button className={btn} onClick={() => b.exec("r_dof_override 0")}>⚪ DoF off</button>
       </div>
+
+      {/* transparency: show the computed engine planes so it isn't a black box */}
+      <div className="rounded-lg border border-line bg-card/40 p-2 font-mono text-[11px] text-muted">
+        <div className="mb-1 font-sans text-[10px] uppercase tracking-wide">
+          computed @ {fmtFocal(b.cam?.view?.fov ?? focalToFov(focalMm))} · f/{fstop}
+        </div>
+        <div className="flex justify-between"><span>sharp from</span><span className="text-text">{r(p.nearCrisp)}</span></div>
+        <div className="flex justify-between"><span>sharp to</span><span className="text-text">{farTxt(p.farCrisp)}</span></div>
+        <div className="flex justify-between"><span>full blur &lt;</span><span>{r(p.nearBlurry)} · &gt; {farTxt(p.farBlurry)}</span></div>
+      </div>
+
       <p className="px-0.5 text-[11px] leading-relaxed text-muted">
-        Live in-engine depth of field via <code>r_dof_override</code>. Crisp planes
-        stay sharp; blurry planes fall off. CS2 has no depth pass, so this is the
+        Set where the subject is sharp and how shallow the look is — the four engine
+        planes are computed from lens optics. CS2 has no depth pass, so this is the
         real-time path.
       </p>
     </div>
