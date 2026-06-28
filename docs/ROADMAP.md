@@ -98,6 +98,22 @@ CLI shell-outs ("use if installed") — NOT bundled; GPU + separate install.
 - Timescale (slow-mo) channel; follow-cam / auto-keyframe a target via entity API.
 - Stretch: ReShade focus-bridge addon for live CinematicDOF auto-focus.
 
+## Idea backlog (later)
+- **ReShade integration into the Noise Cam UI** (user idea, 2026-06-28): surface
+  ReShade tools — esp. **depth maps** / CinematicDOF — and control them from our UI.
+  Reality: ReShade has no external API; it's an injected shader layer. The viable
+  path is a **custom ReShade addon** (ReShade 5+ addon API, C++ DLL) that hooks
+  present/depth inside the game and bridges to us over a local socket — same
+  client-dials-out pattern as the HLAE bridge. What that unlocks:
+  - **Control:** toggle ReShade effects + set CinematicDOF focus distance per frame
+    from our keyframed DoF channel (this is the "focus-bridge" stretch above) — very
+    doable, just commands/values over the socket.
+  - **Depth readout:** pull the depth buffer for our UI. Full-res live depth to an
+    external app is GPU-heavy; realistic version is a downsampled depth preview or a
+    focus-distance probe under the reticle, not a full live depth map.
+  - Overlaps Phase 6 (AI depth via DA3 fills the *post* depth-map gap; ReShade fills
+    the *live* one). Treat as an optional power-user add-on, not core.
+
 ---
 
 ## Out of scope (deliberate)
