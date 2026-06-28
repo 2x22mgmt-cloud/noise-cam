@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useBridge, TICKRATE, type Bridge, type Keyframe } from "./useBridge";
 import { fmtFocal, focalToFov } from "./lens";
@@ -13,11 +13,12 @@ const btnDanger = "border-danger/40! text-danger hover:bg-danger/10!";
 const input =
   "px-2 py-1.5 rounded-md border border-line bg-bg/60 text-xs outline-none focus:border-accent/60 w-full";
 
-type TabKey = "path" | "camera" | "dof" | "console";
+type TabKey = "path" | "camera" | "dof" | "record" | "console";
 const TABS: { key: TabKey; label: string }[] = [
   { key: "path", label: "Path" },
   { key: "camera", label: "Camera" },
   { key: "dof", label: "DoF" },
+  { key: "record", label: "Rec" },
   { key: "console", label: "Console" },
 ];
 
@@ -48,6 +49,7 @@ export default function App() {
         {tab === "path" && <PathTab b={b} />}
         {tab === "camera" && <CameraTab b={b} />}
         {tab === "dof" && <DofTab b={b} />}
+        {tab === "record" && <RecordTab b={b} />}
         {tab === "console" && <ConsoleTab b={b} />}
       </div>
     </div>
@@ -350,6 +352,121 @@ function DofTab({ b }: { b: Bridge }) {
         stay sharp; blurry planes fall off. CS2 has no depth pass, so this is the
         real-time path.
       </p>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- Record */
+function RecordTab({ b }: { b: Bridge }) {
+  const { keyframes, send, exec } = b;
+  const [folder, setFolder] = useState("D:\\noisecam\\recordings");
+  const [fps, setFps] = useState("60");
+  const [crf, setCrf] = useState("16");
+  const [recording, setRecording] = useState(false);
+  // when recording a campath, auto-stop once the demo tick passes this
+  const endTick = useRef<number | null>(null);
+
+  const ticks = keyframes.items
+    .map((k) => (typeof k.tick === "number" ? k.tick : undefined))
+    .filter((t): t is number => typeof t === "number");
+  const startTick = ticks.length ? Math.min(...ticks) : null;
+  const lastTick = ticks.length ? Math.max(...ticks) : null;
+
+  // Build the HLAE mirv_streams setup: pipe the beauty pass through FFmpeg to mp4.
+  const applySettings = () => {
+    const preset = "noisecam_h264";
+    exec(
+      [
+        `mirv_streams record name "${folder}"`,
+        `host_framerate ${fps}`,
+        `mirv_streams settings add ffmpeg ${preset} ` +
+          `"-c:v libx264 -preset slow -crf ${crf} -pix_fmt yuv420p {QUOTE}{AFX_STREAM_PATH}.mp4{QUOTE}"`,
+        `mirv_streams edit afxDefault settings ${preset}`,
+      ].join(";"),
+    );
+  };
+
+  const start = () => {
+    exec("mirv_streams record start");
+    setRecording(true);
+    endTick.current = null;
+  };
+  const stop = () => {
+    exec("mirv_streams record end;host_framerate 0");
+    setRecording(false);
+    endTick.current = null;
+  };
+
+  // Killer button: enable path -> seek to start -> record -> play, then auto-stop
+  // when the live tick reaches the last keyframe.
+  const recordCampath = () => {
+    if (startTick == null || lastTick == null) {
+      b.exec("// no keyframes to record — capture a path first");
+      return;
+    }
+    send({ type: "enable", on: true });
+    exec("demo_gototick " + startTick);
+    exec("mirv_streams record start");
+    exec("demo_resume");
+    endTick.current = lastTick;
+    setRecording(true);
+  };
+
+  // Watch the live tick; stop recording when the campath reaches its end.
+  const liveTick = b.cam?.demoTick;
+  useEffect(() => {
+    if (recording && endTick.current != null && typeof liveTick === "number") {
+      if (liveTick >= endTick.current) stop();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveTick]);
+
+  const field = (label: string, value: string, set: (v: string) => void, type = "text") => (
+    <label className="flex flex-col gap-1 text-[11px] text-muted">
+      {label}
+      <input className={input} type={type} value={value} onChange={(e) => set(e.target.value)} />
+    </label>
+  );
+
+  return (
+    <div className="space-y-2.5">
+      {field("output folder", folder, setFolder)}
+      <div className="grid grid-cols-2 gap-2">
+        {field("fps", fps, setFps, "number")}
+        {field("quality (CRF, lower = better)", crf, setCrf, "number")}
+      </div>
+      <button className={btn + " w-full"} onClick={applySettings}>
+        Apply recording settings
+      </button>
+
+      <button
+        onClick={recordCampath}
+        disabled={!keyframes.items.length}
+        className="w-full rounded-lg border border-danger/50 bg-danger/15 py-2.5 text-sm font-extrabold text-danger hover:bg-danger/25 disabled:opacity-40"
+      >
+        ⏺ Record this campath
+      </button>
+
+      <div className="grid grid-cols-2 gap-1.5">
+        <button className={`${btn} ${recording ? btnActive : ""}`} onClick={start}>
+          ● Start
+        </button>
+        <button className={`${btn} ${btnDanger}`} onClick={stop}>
+          ■ Stop
+        </button>
+      </div>
+
+      <div className="rounded-lg border border-line bg-card/40 p-2 text-[11px] leading-relaxed text-muted">
+        {recording ? (
+          <span className="text-danger">
+            ⏺ recording{endTick.current != null ? ` → auto-stop at tick ${endTick.current}` : ""}
+          </span>
+        ) : startTick != null ? (
+          <>Path spans tick {startTick} → {lastTick}. FFmpeg must be on PATH / in HLAE.</>
+        ) : (
+          <>Capture a path first, then “Record this campath”. Needs FFmpeg (HLAE).</>
+        )}
+      </div>
     </div>
   );
 }
