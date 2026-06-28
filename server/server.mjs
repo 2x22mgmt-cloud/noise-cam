@@ -24,7 +24,7 @@ const clients = new Set();
 let lastPrint = 0;
 
 console.log(`[dolly-server] listening on ws://localhost:${PORT}${PATH}`);
-console.log('[dolly-server] In CS2 (via HLAE): mirv_script_load "C:\\Users\\User\\Downloads\\Transfer-to-CA\\Projects\\cs2-dolly\\bridge\\noisecam-bridge.js"');
+console.log('[dolly-server] In CS2 (via HLAE): mirv_script_load "D:\\Projects\\cs2-dolly\\bridge\\noisecam-bridge.js"');
 console.log('[dolly-server] Commands:');
 console.log('    capture            drop a keyframe at the current view + demo time');
 console.log('    list               re-print the keyframe list');
