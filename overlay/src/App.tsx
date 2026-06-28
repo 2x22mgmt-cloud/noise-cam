@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useBridge, TICKRATE, type Bridge, type Keyframe } from "./useBridge";
+import { fmtFocal, focalToFov } from "./lens";
 
 const f = (n: unknown, d = 1) =>
   typeof n === "number" && isFinite(n) ? n.toFixed(d) : "–";
@@ -93,7 +94,7 @@ function Readout({ b }: { b: Bridge }) {
         label="time"
         value={b.cam?.demoTime != null ? f(b.cam.demoTime, 2) + "s" : "–"}
       />
-      <Stat label="fov" value={f(v.fov)} />
+      <Stat label="lens" value={fmtFocal(v.fov)} />
       <Stat label="state" value={b.cam?.paused ? "⏸" : "▶"} />
     </div>
   );
@@ -227,7 +228,14 @@ function CameraTab({ b }: { b: Bridge }) {
       <div className="rounded-lg border border-line bg-card/40 p-2 font-mono text-[11px] leading-relaxed">
         <Row label="pos" value={`${f(v.x)}, ${f(v.y)}, ${f(v.z)}`} />
         <Row label="ang" value={`${f(v.rX)}, ${f(v.rY)}, ${f(v.rZ)}`} />
-        <Row label="fov" value={f(v.fov)} />
+        <Row
+          label="lens"
+          value={
+            typeof v.fov === "number"
+              ? `${fmtFocal(v.fov)}  ·  ${f(v.fov)}°`
+              : "–"
+          }
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-1.5">
@@ -263,11 +271,24 @@ function CameraTab({ b }: { b: Bridge }) {
       </div>
 
       <div>
-        <div className="mb-1 px-0.5 text-[10px] uppercase tracking-wide text-muted">fov / camera</div>
+        <div className="mb-1 px-0.5 text-[10px] uppercase tracking-wide text-muted">lens (focal length)</div>
+        <div className="grid grid-cols-5 gap-1">
+          {[18, 24, 35, 50, 85].map((mm) => (
+            <button
+              key={mm}
+              className={btn}
+              title={`${focalToFov(mm).toFixed(1)}° FOV`}
+              onClick={() => exec("mirv_input fov " + focalToFov(mm).toFixed(2))}
+            >
+              {mm}mm
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1 px-0.5 text-[10px] uppercase tracking-wide text-muted">camera</div>
         <div className="grid grid-cols-3 gap-1">
-          <button className={btn} onClick={() => exec("mirv_input fov 35")}>FOV 35</button>
-          <button className={btn} onClick={() => exec("mirv_input fov 55")}>FOV 55</button>
-          <button className={btn} onClick={() => exec("mirv_input fov 75")}>FOV 75</button>
           <button className={btn} onClick={() => exec("mirv_input camera")}>🎥 Cam mode</button>
           <button className={btn} onClick={() => exec("mirv_fix animations 1")}>Fix anims</button>
           <button
