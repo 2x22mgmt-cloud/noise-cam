@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useBridge, TICKRATE, type Bridge, type Keyframe } from "./useBridge";
+import { useBridge, isTauri, TICKRATE, type Bridge, type Keyframe } from "./useBridge";
 import { fmtFocal, fovToFocal, focalToFov } from "./lens";
 import { computeDof, F_STOPS } from "./dof";
 
@@ -76,13 +76,15 @@ function TitleBar({ status }: { status: Bridge["status"] }) {
         />
         {status.text}
       </div>
-      <button
-        onClick={() => getCurrentWindow().hide()}
-        title="Hide overlay (Alt+Shift+D)"
-        className="rounded-md px-1.5 py-0.5 text-muted hover:bg-danger/15 hover:text-danger"
-      >
-        ✕
-      </button>
+      {isTauri() && (
+        <button
+          onClick={() => getCurrentWindow().hide()}
+          title="Hide overlay (Alt+Shift+D)"
+          className="rounded-md px-1.5 py-0.5 text-muted hover:bg-danger/15 hover:text-danger"
+        >
+          ✕
+        </button>
+      )}
     </header>
   );
 }
