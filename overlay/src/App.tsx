@@ -222,12 +222,19 @@ function KfRow({ i, k, b }: { i: number; k: Keyframe; b: Bridge }) {
 
 /* ---------------------------------------------------------------- Camera */
 function CameraTab({ b }: { b: Bridge }) {
-  const { cam, exec } = b;
+  const { cam, exec, send } = b;
   const v = cam?.view || {};
   const [goto, setGoto] = useState("");
   const speeds = ["0.01", "0.1", "0.25", "0.5", "1"];
   return (
     <div className="space-y-2.5">
+      <button
+        onClick={() => send({ type: "capture" })}
+        className="w-full rounded-lg border border-accent/50 bg-accent/15 py-2 text-sm font-extrabold text-accent hover:bg-accent/25"
+      >
+        ● Capture keyframe
+      </button>
+
       <div className="rounded-lg border border-line bg-card/40 p-2 font-mono text-[11px] leading-relaxed">
         <Row label="pos" value={`${f(v.x)}, ${f(v.y)}, ${f(v.z)}`} />
         <Row label="ang" value={`${f(v.rX)}, ${f(v.rY)}, ${f(v.rZ)}`} />
