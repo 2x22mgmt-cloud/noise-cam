@@ -109,6 +109,11 @@ async fn handle_hlae(socket: WebSocket, s: AppState) {
     while let Some(Ok(msg)) = stream.next().await {
         match msg {
             Message::Text(t) => {
+                // Debug breadcrumb: print non-cam messages so the bridge's last
+                // words survive a CS2 crash (visible in the dev console).
+                if !t.contains("\"cam\"") {
+                    println!("[hlae] {t}");
+                }
                 let _ = s.app.emit("hlae:msg", &t); // → desktop overlay
                 let _ = s.relay.tx.send(t); // → browser clients
             }

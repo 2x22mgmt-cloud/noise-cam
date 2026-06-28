@@ -97,80 +97,46 @@ let wasConnected = false;
 const outQueue = [];        // control messages (priority over the cam stream)
 let pushCountdown = 0;      // frames to wait after a path-changing command, then push the list
                             // (mirv.exec is deferred, so we can't read the campath on the same frame)
-const tickByTime = new Map(); // campath keyframe time -> the ACTUAL demo tick it was captured at
-let previewEnabled = false;    // when true, the BRIDGE drives the camera along the path (JS view override)
+// We DON'T read HLAE's campath back in JS — the read path (AdvancedfxCampathIterator
+// + quaternion->euler) is not a real/stable API on this build and crashed CS2 on
+// capture. Instead we track the keyframe list ourselves from the live view stream;
+// HLAE's own campath still stores the points for playback (mirv_campath add/enable).
+const keyframes = [];          // editor-side list: {tick,time,pos,fov,ang:{roll}}
+let enabledState = false;      // our view of campath enabled (toggled by enable/disable)
 let lastView = null;           // latest free-cam view {x,y,z,rX,rY,rZ,fov}
-let pendingCaptureTick = null; // demo tick recorded at capture, assigned to the new keyframe
 
 function demoTickNow() {
 	const t = (typeof mirv.getDemoTick === 'function') ? mirv.getDemoTick() : null;
 	return (typeof t === 'number' && isFinite(t) && t >= 0) ? t : null; // guard undefined/negative
 }
 
-// Create a keyframe with HLAE's OWN command. The JS campath-write API
-// (Quaternion.fromQREulerAngles / new CampathValue / campath.add) HARD-CRASHES CS2 on
-// this build, so we don't touch it. We record the demo tick so "Go" still seeks correctly.
-function captureKeyframe() {
-	pendingCaptureTick = demoTickNow();
-	mirv.exec('mirv_campath add');
-	pushCountdown = 3; // read the campath back a few frames after the deferred add
-}
 function send(obj) { outQueue.push(JSON.stringify(obj)); }
 
-// --- Read the current campath as a plain list -------------------------------
-function getKeyframes() {
-	const cp = mirv.getMainCampath();
-	const raw = [];
-	try {
-		const it = new AdvancedfxCampathIterator(cp);
-		while (it.valid) {
-			const v = it.value;
-			let ang = null;
-			try {
-				const e = v.rot.toQREulerAngles().toQEulerAngles(); // quaternion -> degrees
-				ang = { pitch: e.pitch, yaw: e.yaw, roll: e.roll };
-			} catch (_) {}
-			raw.push({
-				time: it.time,
-				pos: { x: v.pos.x, y: v.pos.y, z: v.pos.z },
-				fov: v.fov,
-				ang
-			});
-			it.next();
-		}
-	} catch (e) { mirv.warning('[dolly] keyframe read: ' + e); }
+// Capture: tell HLAE to store the point (for playback) AND record it editor-side
+// from the live view. We bracket the HLAE command with breadcrumbs so that, if it
+// ever crashes CS2, the relay log shows exactly how far we got.
+function captureKeyframe() {
+	const tick = demoTickNow();
+	send({ type: 'log', msg: '[capture] before mirv_campath add (tick=' + tick + ')' });
+	mirv.exec('mirv_campath add'); // HLAE stores the keyframe for playback
+	send({ type: 'log', msg: '[capture] after mirv_campath add' });
 
-	// Assign the captured demo tick to the newly-added keyframe (the one without a tick yet),
-	// so "Go" seeks to where you actually were (not the engine-clock keyframe time).
-	if (typeof pendingCaptureTick === 'number') {
-		let assigned = false;
-		for (const r of raw) {
-			if (!tickByTime.has(r.time)) { tickByTime.set(r.time, pendingCaptureTick); assigned = true; break; }
-		}
-		if (assigned) pendingCaptureTick = null;
-	}
-	// drop ticks for keyframes that no longer exist
-	const liveTimes = new Set(raw.map((r) => r.time));
-	for (const k of [...tickByTime.keys()]) if (!liveTimes.has(k)) tickByTime.delete(k);
-
-	// Demo↔game clock offset (CS2: keyframe times are GAME time; demo navigation is DEMO time).
-	// Fallback to convert a keyframe's game time → demo tick when we lack an exact captured tick.
-	const curDemo = (typeof mirv.getDemoTime === 'function') ? mirv.getDemoTime() : undefined;
-	const curGame = (typeof mirv.getCurTime === 'function') ? mirv.getCurTime() : undefined;
-	const offsetSec = (typeof curDemo === 'number' && typeof curGame === 'number') ? (curGame - curDemo) : null;
-
-	const items = raw.map((r) => {
-		let tick = tickByTime.has(r.time) ? tickByTime.get(r.time) : null;
-		if (typeof tick !== 'number') {
-			// No exact captured tick: convert the GAME-time keyframe to a DEMO tick via the live
-			// offset (right as long as the offset hasn't changed since capture). Never raw game*64.
-			tick = (offsetSec !== null) ? Math.round((r.time - offsetSec) * 64) : Math.round(r.time * 64);
-		}
-		return { pos: r.pos, fov: r.fov, ang: r.ang, tick, time: tick / 64 };
+	const v = lastView;
+	keyframes.push({
+		tick: (typeof tick === 'number') ? tick : null,
+		time: (typeof tick === 'number') ? tick / 64 : null,
+		pos: v ? { x: v.x, y: v.y, z: v.z } : null,
+		fov: v ? v.fov : null,
+		ang: v ? { roll: v.rZ } : null, // roll from the live euler rZ
 	});
-	return { type: 'keyframes', count: cp.size, enabled: cp.enabled, items };
+	keyframes.sort((a, b) => ((a.tick ?? 0) - (b.tick ?? 0)));
+	pushKeyframes();
 }
-function pushKeyframes() { try { send(getKeyframes()); } catch (_) {} }
+
+// Push our editor-side list (no JS campath read-back).
+function pushKeyframes() {
+	send({ type: 'keyframes', count: keyframes.length, enabled: enabledState, items: keyframes.slice() });
+}
 
 // --- Handle commands from the editor ----------------------------------------
 function handleIncoming(msg) {
@@ -178,17 +144,18 @@ function handleIncoming(msg) {
 	let obj;
 	try { obj = JSON.parse(msg); } catch (_) { return; }
 	switch (obj.type) {
-		case 'exec':    if (typeof obj.cmd === 'string') { mirv.exec(obj.cmd); pushCountdown = 3; } break;
+		case 'exec':    if (typeof obj.cmd === 'string') { mirv.exec(obj.cmd); } break;
 		case 'capture': captureKeyframe(); break;
-		case 'clear':   mirv.exec('mirv_campath clear'); pushCountdown = 3; break;
-		case 'remove':  if (Number.isInteger(obj.index)) { mirv.exec('mirv_campath remove ' + obj.index); pushCountdown = 3; } break;
+		case 'clear':   mirv.exec('mirv_campath clear'); keyframes.length = 0; pushKeyframes(); break;
+		case 'remove':  if (Number.isInteger(obj.index)) { keyframes.splice(obj.index, 1); mirv.exec('mirv_campath remove ' + obj.index); pushKeyframes(); } break;
 		case 'enable':
 			// CS2 keyframes are stored in GAME time, which only moves forward — so once it
 			// passes the keyframes you can't play into them. `offset current#0` re-maps the
 			// path to START at the current moment, which is what makes playback actually work.
 			if (obj.on) mirv.exec('mirv_campath offset current#0;mirv_campath enabled 1');
 			else mirv.exec('mirv_campath enabled 0');
-			pushCountdown = 3;
+			enabledState = !!obj.on;
+			pushKeyframes();
 			break;
 		case 'draw':
 			// Richer, more-visible draw: path + camera icons + axes + big index labels.
@@ -265,10 +232,8 @@ mirv.onCViewRenderSetupView = (e) => {
 	return undefined;
 };
 
-// --- Auto-sync the editor whenever the campath changes ----------------------
-try {
-	mirv.getMainCampath().onChanged = () => pushKeyframes();
-} catch (_) {}
+// (No campath onChanged hook — we track keyframes editor-side; the JS read-back
+//  path crashed CS2 on capture, so we don't touch the campath read API at all.)
 
 // --- Register the `mirv_dolly` console command (for binds) -------------------
 const dollyCmd = new AdvancedfxConCommand((args) => {
@@ -291,10 +256,9 @@ globalThis.__cs2_dolly = {
 	cleanup: () => {
 		try { conn.close(); } catch (_) {}
 		try { dollyCmd.unregister(); } catch (_) {}
-		try { const cp = mirv.getMainCampath(); if (cp.onChanged) cp.onChanged = undefined; } catch (_) {}
 		try { mirv.onCViewRenderSetupView = undefined; } catch (_) {}
 	}
 };
 
-mirv.message('[dolly] bridge v9 LOADED (Go fix + offset-align on enable) — look for v9');
+mirv.message('[dolly] bridge v10 LOADED (editor-side keyframes, no JS campath read-back) — look for v10');
 } // end wrapper block (keeps declarations out of the persistent global scope)
