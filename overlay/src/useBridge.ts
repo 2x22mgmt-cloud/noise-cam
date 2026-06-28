@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-// The overlay is a Tauri webview, so it is NOT served from the relay's origin —
-// we always dial the Node relay explicitly. (The browser panel used location.host;
-// here we hardcode the relay port.)
-const RELAY_URL = "ws://localhost:31337/ui";
+// The relay now lives inside the Tauri app (Rust). The webview talks to it over
+// Tauri IPC: it listens for "hlae:*" / "relay:*" events and sends commands via
+// the `hlae_send` command. (No browser WebSocket anymore.)
 export const TICKRATE = 64; // CS2 demos
 
 export type View = {
@@ -42,13 +43,11 @@ export type Bridge = {
 };
 
 export function useBridge(): Bridge {
-  const [status, setStatus] = useState<Status>({ hlae: false, text: "connecting…" });
+  const [status, setStatus] = useState<Status>({ hlae: false, text: "starting relay…" });
   const [cam, setCam] = useState<Cam | null>(null);
   const [keyframes, setKeyframes] = useState<Keyframes>({ count: 0, enabled: false, items: [] });
   const [log, setLog] = useState<LogLine[]>([]);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // throttle cam UI updates to ~12fps so React isn't slammed by the 60+/s stream
   const lastCamPaint = useRef(0);
 
@@ -59,16 +58,11 @@ export function useBridge(): Bridge {
 
   const send = useCallback(
     (obj: Record<string, unknown>) => {
-      const ws = wsRef.current;
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(obj));
-        if (obj.type && obj.type !== "exec") {
-          const on = obj.on === true ? " on" : obj.on === false ? " off" : "";
-          const idx = obj.index !== undefined ? ` #${obj.index}` : "";
-          pushLog(`» ${obj.type}${on}${idx}`);
-        }
-      } else {
-        pushLog("not connected");
+      invoke("hlae_send", { msg: JSON.stringify(obj) }).catch((err) => pushLog(String(err)));
+      if (obj.type && obj.type !== "exec") {
+        const on = obj.on === true ? " on" : obj.on === false ? " off" : "";
+        const idx = obj.index !== undefined ? ` #${obj.index}` : "";
+        pushLog(`» ${obj.type}${on}${idx}`);
       }
     },
     [pushLog],
@@ -83,44 +77,47 @@ export function useBridge(): Bridge {
   );
 
   useEffect(() => {
-    let closed = false;
+    let active = true;
+    const unlistens: UnlistenFn[] = [];
 
-    const connect = () => {
-      const ws = new WebSocket(RELAY_URL);
-      wsRef.current = ws;
-
-      ws.onopen = () => setStatus({ hlae: false, text: "server connected — waiting for CS2" });
-      ws.onclose = () => {
-        if (closed) return;
-        setStatus({ hlae: false, text: "server offline — retrying" });
-        retryRef.current = setTimeout(connect, 1000);
-      };
-      ws.onerror = () => {};
-      ws.onmessage = (ev) => {
-        let m: any;
-        try {
-          m = JSON.parse(ev.data);
-        } catch {
-          return;
-        }
-        if (m.type === "cam") {
-          const now = performance.now();
-          if (now - lastCamPaint.current < 80) return;
-          lastCamPaint.current = now;
-          setCam(m);
-        } else if (m.type === "keyframes") {
-          setKeyframes({ count: m.count ?? 0, enabled: !!m.enabled, items: m.items || [] });
-        } else if (m.type === "status") {
-          setStatus({ hlae: !!m.hlae, text: m.hlae ? "CS2 connected" : "waiting for CS2" });
-        }
-      };
+    const handleMsg = (raw: string) => {
+      let m: any;
+      try {
+        m = JSON.parse(raw);
+      } catch {
+        return;
+      }
+      if (m.type === "cam") {
+        const now = performance.now();
+        if (now - lastCamPaint.current < 80) return;
+        lastCamPaint.current = now;
+        setCam(m);
+      } else if (m.type === "keyframes") {
+        setKeyframes({ count: m.count ?? 0, enabled: !!m.enabled, items: m.items || [] });
+      }
     };
 
-    connect();
+    (async () => {
+      const subs = await Promise.all([
+        listen<string>("hlae:msg", (e) => handleMsg(e.payload)),
+        listen<boolean>("hlae:status", (e) =>
+          setStatus({ hlae: e.payload, text: e.payload ? "CS2 connected" : "waiting for CS2" }),
+        ),
+        listen<string>("relay:listening", () =>
+          setStatus({ hlae: false, text: "waiting for CS2" }),
+        ),
+        listen<string>("relay:error", (e) => setStatus({ hlae: false, text: e.payload })),
+      ]);
+      if (!active) {
+        subs.forEach((u) => u());
+        return;
+      }
+      unlistens.push(...subs);
+    })();
+
     return () => {
-      closed = true;
-      if (retryRef.current) clearTimeout(retryRef.current);
-      wsRef.current?.close();
+      active = false;
+      unlistens.forEach((u) => u());
     };
   }, []);
 
