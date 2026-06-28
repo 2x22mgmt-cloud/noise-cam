@@ -1,0 +1,13 @@
+{
+  "name": "cs2-dolly-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CS2 Dolly — real-time camera-path editor UI for HLAE",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
