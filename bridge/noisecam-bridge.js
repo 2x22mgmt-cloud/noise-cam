@@ -5,7 +5,7 @@
 //
 //  Load it in the CS2 console (CS2 launched through HLAE) — adjust the path to
 //  wherever this repo lives on your machine:
-//      mirv_script_load "C:\Users\User\Downloads\Transfer-to-CA\Projects\cs2-dolly\bridge\noisecam-bridge.js"
+//      mirv_script_load "D:\Projects\cs2-dolly\bridge\noisecam-bridge.js"
 //
 //  What it does:
 //    - streams the live camera pose + demo time/tick to the editor (every frame)

@@ -15,7 +15,7 @@ Personal tool, local only. (Shareable with a few friends — packaging to a sing
 2. **Launch CS2 through HLAE** (AvoidVac / `-insecure`), load a demo (`playdemo …`).
 3. In the **CS2 console**, load the bridge:
    ```
-   mirv_script_load "C:\Users\User\Downloads\Transfer-to-CA\Projects\cs2-dolly\bridge\noisecam-bridge.js"
+   mirv_script_load "D:\Projects\cs2-dolly\bridge\noisecam-bridge.js"
    ```
 4. The panel's status dot turns green ("CS2 connected"). Fly the cam, hit **Capture**,
    build a path, **Enable**, scrub, preview — all from the browser.
@@ -88,7 +88,7 @@ hook, demo tick, and campath storage *officially*, so there's nothing to inject.
 
 ### 1. Start the editor server
 ```powershell
-cd C:\Users\User\Downloads\Transfer-to-CA\Projects\cs2-dolly\server
+cd D:\Projects\cs2-dolly\server
 npm install
 npm start
 ```
@@ -100,7 +100,7 @@ You should see: `listening on ws://localhost:31337/mirv`.
 
 ### 3. Load the bridge (in the CS2 console)
 ```
-mirv_script_load "C:\Users\User\Downloads\Transfer-to-CA\Projects\cs2-dolly\bridge\noisecam-bridge.js"
+mirv_script_load "D:\Projects\cs2-dolly\bridge\noisecam-bridge.js"
 ```
 Within ~1 second the server console should print **"HLAE connected."** and start
 showing a live line like:
