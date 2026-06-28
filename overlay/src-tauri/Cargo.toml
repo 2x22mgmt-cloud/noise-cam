@@ -22,11 +22,13 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Built-in WebSocket relay that the in-game HLAE bridge dials into (replaces the
-# separate Node relay, so launching the overlay launches everything).
-tokio = { version = "1", features = ["net", "sync"] }
-tokio-tungstenite = "0.21"
+# Built-in relay/hub: hosts the HLAE WebSocket, serves the control UI to phones/
+# tablets over the LAN, and relays to browser clients — so launching the overlay
+# launches everything (no Node).
+tokio = { version = "1", features = ["net", "sync", "rt-multi-thread", "macros"] }
+axum = { version = "0.7", features = ["ws"] }
 futures-util = "0.3"
+include_dir = "0.7"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"

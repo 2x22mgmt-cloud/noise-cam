@@ -12,7 +12,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(relay::HlaeState::default())
+        .manage(relay::RelayState::default())
         .invoke_handler(tauri::generate_handler![relay::hlae_send])
         .setup(|app| {
             // Global hotkey: Alt+Shift+D ("dolly") shows/hides the overlay.
@@ -40,9 +40,9 @@ pub fn run() {
                 app.global_shortcut().register(toggle)?;
             }
 
-            // Start the built-in WebSocket relay the HLAE bridge connects to.
-            let hlae_state = app.state::<relay::HlaeState>().inner().clone();
-            relay::start(app.handle().clone(), hlae_state);
+            // Start the built-in relay/hub (HLAE socket + browser UI over the LAN).
+            let relay_state = app.state::<relay::RelayState>().inner().clone();
+            relay::start(app.handle().clone(), relay_state);
 
             // Dock the panel to the top-right corner on launch.
             if let Some(win) = app.get_webview_window("main") {
