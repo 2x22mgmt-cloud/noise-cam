@@ -170,6 +170,24 @@ function handleIncoming(msg) {
 				pushCountdown = 3;
 			}
 			break;
+		case 'select':
+			// Select a single keyframe (so HLAE highlights it when drawing, and so the
+			// `edit ... current` commands below target it).
+			if (Number.isInteger(obj.index)) mirv.exec('mirv_campath select #' + obj.index + ' #' + obj.index);
+			break;
+		case 'editKf':
+			// Move/retime an existing keyframe to the CURRENT camera. Select it first,
+			// then set whichever channels were requested to "current", and mirror the
+			// change into our editor-side list so the UI updates.
+			if (Number.isInteger(obj.index) && keyframes[obj.index]) {
+				const i = obj.index, v = lastView, cmds = ['mirv_campath select #' + i + ' #' + i];
+				if (obj.pos) { cmds.push('mirv_campath edit position current'); if (v) keyframes[i].pos = { x: v.x, y: v.y, z: v.z }; }
+				if (obj.ang) { cmds.push('mirv_campath edit angles current'); if (v) keyframes[i].ang = { roll: v.rZ }; }
+				if (obj.fov) { cmds.push('mirv_campath edit fov current'); if (v) keyframes[i].fov = v.fov; }
+				mirv.exec(cmds.join(';'));
+				pushKeyframes();
+			}
+			break;
 		case 'list':    pushKeyframes(); break;
 		default: break;
 	}
@@ -260,5 +278,5 @@ globalThis.__cs2_dolly = {
 	}
 };
 
-mirv.message('[dolly] bridge v10 LOADED (editor-side keyframes, no JS campath read-back) — look for v10');
+mirv.message('[dolly] bridge v11 LOADED (editor-side keyframes + select/edit keyframe) — look for v11');
 } // end wrapper block (keeps declarations out of the persistent global scope)
