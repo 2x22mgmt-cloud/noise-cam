@@ -117,7 +117,14 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
 function PathTab({ b }: { b: Bridge }) {
   const [drawOn, setDrawOn] = useState(false);
   const [name, setName] = useState("myshot");
+  const [sel, setSel] = useState<number | null>(null);
   const { keyframes, send, exec } = b;
+
+  const selectKf = (i: number) => {
+    setSel(i);
+    send({ type: "select", index: i }); // highlights it in-game (with draw on)
+  };
+  const selValid = sel != null && sel < keyframes.items.length;
 
   return (
     <div className="space-y-2.5">
@@ -176,26 +183,41 @@ function PathTab({ b }: { b: Bridge }) {
         <div className="grid grid-cols-[1.4rem_3rem_1fr_2.2rem_2.6rem] gap-1 px-1 pb-1 text-[10px] uppercase tracking-wide text-muted">
           <span>#</span><span>time</span><span>pos</span><span>fov</span><span>roll</span>
         </div>
-        <div className="max-h-56 space-y-1 overflow-y-auto">
+        <div className="max-h-48 space-y-1 overflow-y-auto">
           {keyframes.items.length === 0 ? (
             <div className="rounded-md border border-dashed border-line px-2 py-3 text-center text-[11px] text-muted">
               No keyframes yet — fly the cam and hit Capture.
             </div>
           ) : (
-            keyframes.items.map((k, i) => <KfRow key={i} i={i} k={k} b={b} />)
+            keyframes.items.map((k, i) => (
+              <KfRow key={i} i={i} k={k} b={b} selected={sel === i} onSelect={() => selectKf(i)} />
+            ))
           )}
         </div>
+
+        {selValid && <EditBar b={b} index={sel as number} />}
       </div>
     </div>
   );
 }
 
-function KfRow({ i, k, b }: { i: number; k: Keyframe; b: Bridge }) {
+function KfRow({
+  i, k, b, selected, onSelect,
+}: { i: number; k: Keyframe; b: Bridge; selected: boolean; onSelect: () => void }) {
   const p = k.pos || ({} as NonNullable<Keyframe["pos"]>);
   const a = k.ang || {};
   const tick = typeof k.tick === "number" ? k.tick : Math.round((k.time || 0) * TICKRATE);
+  const stop = (fn: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    fn();
+  };
   return (
-    <div className="grid grid-cols-[1.4rem_3rem_1fr_2.2rem_2.6rem_auto] items-center gap-1 rounded-md border border-line bg-card/50 px-1.5 py-1 text-[11px]">
+    <div
+      onClick={onSelect}
+      className={`grid cursor-pointer grid-cols-[1.4rem_3rem_1fr_2.2rem_2.6rem_auto] items-center gap-1 rounded-md border px-1.5 py-1 text-[11px] ${
+        selected ? "border-accent bg-accent/15" : "border-line bg-card/50 hover:border-accent/40"
+      }`}
+    >
       <span className="text-muted">{i}</span>
       <span className="font-mono tabular-nums">{f(k.time, 2)}s</span>
       <span className="truncate font-mono text-muted">
@@ -206,18 +228,50 @@ function KfRow({ i, k, b }: { i: number; k: Keyframe; b: Bridge }) {
       <span className="flex gap-1">
         <button
           title={`demo_gototick ${tick}`}
-          onClick={() => b.exec("demo_gototick " + tick)}
+          onClick={stop(() => b.exec("demo_gototick " + tick))}
           className="rounded border border-line px-1.5 py-0.5 hover:border-accent/60 hover:text-accent"
         >
           Go
         </button>
         <button
-          onClick={() => b.send({ type: "remove", index: i })}
+          onClick={stop(() => b.send({ type: "remove", index: i }))}
           className="rounded border border-danger/40 px-1.5 py-0.5 text-danger hover:bg-danger/10"
         >
           ✕
         </button>
       </span>
+    </div>
+  );
+}
+
+/* Edit the selected keyframe: fly the cam to a new spot, then move the keyframe
+   to it (position / angle / lens), via mirv_campath select + edit ... current. */
+function EditBar({ b, index }: { b: Bridge; index: number }) {
+  const editBtn =
+    "flex-1 rounded-md border border-line bg-card/70 px-1.5 py-1.5 text-[11px] font-semibold hover:border-accent/60 hover:bg-card";
+  return (
+    <div className="mt-2 rounded-lg border border-accent/40 bg-accent/5 p-2">
+      <div className="mb-1.5 text-[11px] text-muted">
+        Editing <span className="font-bold text-accent">keyframe #{index}</span> — fly the cam where
+        you want it, then:
+      </div>
+      <div className="flex gap-1.5">
+        <button
+          className="flex-[1.4] rounded-md border border-accent/50 bg-accent/15 px-1.5 py-1.5 text-[11px] font-extrabold text-accent hover:bg-accent/25"
+          onClick={() => b.send({ type: "editKf", index, pos: true, ang: true })}
+        >
+          ⟳ Move here
+        </button>
+        <button className={editBtn} onClick={() => b.send({ type: "editKf", index, pos: true })}>
+          pos
+        </button>
+        <button className={editBtn} onClick={() => b.send({ type: "editKf", index, ang: true })}>
+          angle
+        </button>
+        <button className={editBtn} onClick={() => b.send({ type: "editKf", index, fov: true })}>
+          lens
+        </button>
+      </div>
     </div>
   );
 }
