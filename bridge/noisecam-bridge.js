@@ -194,7 +194,14 @@ function handleIncoming(msg) {
 }
 
 // --- Per-frame: read camera (no override), pump the socket -------------------
-mirv.onCViewRenderSetupView = (e) => {
+// Use the modern events API (HLAE 2.190+), NOT the deprecated
+// `mirv.onCViewRenderSetupView`. The deprecated single-slot callback takes over
+// view control and SUPPRESSES native campath playback (returning undefined falls
+// back to the raw spectator view). The events listener is additive: we only
+// observe for streaming and return undefined, so `mirv_campath enabled 1` still
+// drives the camera. This is what HLAE's own example snippets use.
+const VIEW_ID = 'noisecam/cViewRenderSetupView';
+mirv.events.cViewRenderSetupView.on(VIEW_ID, (e) => {
 	frame++;
 	const cv0 = e.currentView;
 	lastView = { x: cv0.x, y: cv0.y, z: cv0.z, rX: cv0.rX, rY: cv0.rY, rZ: cv0.rZ, fov: cv0.fov };
@@ -245,10 +252,10 @@ mirv.onCViewRenderSetupView = (e) => {
 		wasConnected = false;
 	}
 
-	// (JS camera-driving via eval()/view-override was removed — the campath-write/eval math
-	// path hard-crashes CS2 on this build. Playback uses native `mirv_campath enabled`.)
+	// We never override the view here — return undefined so native campath
+	// playback (mirv_campath enabled) controls the camera.
 	return undefined;
-};
+});
 
 // (No campath onChanged hook — we track keyframes editor-side; the JS read-back
 //  path crashed CS2 on capture, so we don't touch the campath read API at all.)
@@ -274,9 +281,9 @@ globalThis.__cs2_dolly = {
 	cleanup: () => {
 		try { conn.close(); } catch (_) {}
 		try { dollyCmd.unregister(); } catch (_) {}
-		try { mirv.onCViewRenderSetupView = undefined; } catch (_) {}
+		try { mirv.events.cViewRenderSetupView.off(VIEW_ID); } catch (_) {}
 	}
 };
 
-mirv.message('[dolly] bridge v11 LOADED (editor-side keyframes + select/edit keyframe) — look for v11');
+mirv.message('[dolly] bridge v12 LOADED (events API view hook — native campath playback now works) — look for v12');
 } // end wrapper block (keeps declarations out of the persistent global scope)
