@@ -101,7 +101,11 @@ let pushCountdown = 0;      // frames to wait after a path-changing command, the
 // + quaternion->euler) is not a real/stable API on this build and crashed CS2 on
 // capture. Instead we track the keyframe list ourselves from the live view stream;
 // HLAE's own campath still stores the points for playback (mirv_campath add/enable).
-const keyframes = [];          // editor-side list: {tick,time,pos,fov,ang:{roll}}
+// Persist the editor-side list across script reloads (it lives on globalThis), so
+// reloading the bridge to ship a fix no longer blanks the overlay's keyframe list.
+const keyframes = (globalThis.__cs2_dolly && Array.isArray(globalThis.__cs2_dolly.keyframes))
+	? globalThis.__cs2_dolly.keyframes
+	: [];          // editor-side list: {tick,time,pos,fov,ang:{roll}}
 let enabledState = false;      // our view of campath enabled (toggled by enable/disable)
 let lastView = null;           // latest free-cam view {x,y,z,rX,rY,rZ,fov}
 
@@ -149,10 +153,13 @@ function handleIncoming(msg) {
 		case 'clear':   mirv.exec('mirv_campath clear'); keyframes.length = 0; pushKeyframes(); break;
 		case 'remove':  if (Number.isInteger(obj.index)) { keyframes.splice(obj.index, 1); mirv.exec('mirv_campath remove ' + obj.index); pushKeyframes(); } break;
 		case 'enable':
-			// CS2 keyframes are stored in GAME time, which only moves forward — so once it
-			// passes the keyframes you can't play into them. `offset current#0` re-maps the
-			// path to START at the current moment, which is what makes playback actually work.
-			if (obj.on) mirv.exec('mirv_campath offset current#0;mirv_campath enabled 1');
+			// Enable native campath playback. IMPORTANT (verified live in CS2 2.190):
+			//   - The campath only drives the camera while the demo is PLAYING (not paused).
+			//   - `mirv_campath offset current#0` (old behaviour) shifted the path's time
+			//     window PAST the playhead, so the camera never entered it. We reset the
+			//     offset to 0 so the path plays at the times it was captured.
+			//   Workflow: enable → seek to the first keyframe (Go) → play (demo_resume).
+			if (obj.on) mirv.exec('mirv_campath offset 0;mirv_campath enabled 1');
 			else mirv.exec('mirv_campath enabled 0');
 			enabledState = !!obj.on;
 			pushKeyframes();
@@ -282,8 +289,9 @@ globalThis.__cs2_dolly = {
 		try { conn.close(); } catch (_) {}
 		try { dollyCmd.unregister(); } catch (_) {}
 		try { mirv.events.cViewRenderSetupView.off(VIEW_ID); } catch (_) {}
-	}
+	},
+	keyframes, // persisted so a reload keeps the editor-side keyframe list
 };
 
-mirv.message('[dolly] bridge v12 LOADED (events API view hook — native campath playback now works) — look for v12');
+mirv.message('[dolly] bridge v13 LOADED (enable=offset 0, list persists across reloads) — look for v13');
 } // end wrapper block (keeps declarations out of the persistent global scope)
