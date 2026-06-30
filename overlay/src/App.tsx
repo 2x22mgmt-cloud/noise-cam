@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  Aperture, Camera, CircleDot, Clapperboard, Crosshair, Disc, Move3d,
+  Aperture, Camera, CircleDot, Clapperboard, Crosshair, Disc, Eye, EyeOff, Move3d,
   Pause, Play, Route, Send, Square, SquareTerminal, Trash2, Video, Wrench, X,
 } from "lucide-react";
 import { useBridge, isTauri, TICKRATE, type Bridge, type Keyframe } from "./useBridge";
@@ -20,11 +20,12 @@ const input =
   "w-full border border-line bg-black px-2 py-1.5 text-[11px] text-text outline-none placeholder:text-muted focus:border-accent";
 const label = "px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted";
 
-type TabKey = "path" | "camera" | "dof" | "record" | "console";
+type TabKey = "path" | "camera" | "dof" | "hud" | "record" | "console";
 const TABS: { key: TabKey; label: string; Icon: typeof Route }[] = [
   { key: "path", label: "Path", Icon: Route },
   { key: "camera", label: "Cam", Icon: Video },
   { key: "dof", label: "DoF", Icon: Aperture },
+  { key: "hud", label: "HUD", Icon: Eye },
   { key: "record", label: "Rec", Icon: Disc },
   { key: "console", label: "", Icon: SquareTerminal },
 ];
@@ -58,6 +59,7 @@ export default function App() {
         {tab === "path" && <PathTab b={b} />}
         {tab === "camera" && <CameraTab b={b} />}
         {tab === "dof" && <DofTab b={b} />}
+        {tab === "hud" && <HudTab b={b} />}
         {tab === "record" && <RecordTab b={b} />}
         {tab === "console" && <ConsoleTab b={b} />}
       </div>
@@ -447,6 +449,80 @@ function DofTab({ b }: { b: Bridge }) {
       <p className="text-[11px] leading-relaxed text-muted">
         Set where the subject is sharp and how shallow the look is — the engine
         planes are computed from lens optics.
+      </p>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------- HUD */
+type HudElement = { key: string; label: string; on: string; off: string; def: boolean };
+const HUD_ELEMENTS: HudElement[] = [
+  { key: "hud", label: "HUD", on: "cl_drawhud 1", off: "cl_drawhud 0", def: true },
+  { key: "crosshair", label: "Crosshair", on: "crosshair 1", off: "crosshair 0", def: true },
+  { key: "weapon", label: "Weapon", on: "r_drawviewmodel 1", off: "r_drawviewmodel 0", def: true },
+  { key: "killfeed", label: "Kill feed", on: "cl_drawhud_force_deathnotices -1", off: "cl_drawhud_force_deathnotices 0", def: true },
+  { key: "radar", label: "Radar", on: "cl_drawhud_force_radar -1", off: "cl_drawhud_force_radar 0", def: true },
+  { key: "xray", label: "X-ray", on: "spec_show_xray 1", off: "spec_show_xray 0", def: true },
+];
+
+function HudTab({ b }: { b: Bridge }) {
+  const { exec } = b;
+  const [vis, setVis] = useState<Record<string, boolean>>(
+    Object.fromEntries(HUD_ELEMENTS.map((e) => [e.key, e.def])),
+  );
+
+  const toggle = (e: HudElement) => {
+    const next = !vis[e.key];
+    exec(next ? e.on : e.off);
+    setVis((v) => ({ ...v, [e.key]: next }));
+  };
+  const setAll = (v: boolean, cmd: string) => {
+    exec(cmd);
+    setVis(Object.fromEntries(HUD_ELEMENTS.map((e) => [e.key, v])));
+  };
+
+  return (
+    <div className="space-y-2.5">
+      <div className={label}>toggle hud elements</div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {HUD_ELEMENTS.map((e) => {
+          const on = vis[e.key];
+          return (
+            <button
+              key={e.key}
+              onClick={() => toggle(e)}
+              className={`flex items-center justify-between border px-2.5 py-2 text-[11px] font-medium uppercase tracking-wide transition ${
+                on ? "border-line text-sub hover:border-muted hover:text-text" : "border-accent! text-accent"
+              }`}
+            >
+              {e.label}
+              {on ? <Eye size={14} strokeWidth={1.75} /> : <EyeOff size={14} strokeWidth={1.75} />}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 gap-1.5 pt-1">
+        <button
+          className="flex items-center justify-center gap-1.5 bg-text py-2 text-[11px] font-semibold uppercase tracking-wide text-bg transition hover:bg-white"
+          onClick={() => setAll(false, "sv_cheats 1;cl_drawhud 0;crosshair 0;r_drawviewmodel 0;spec_show_xray 0")}
+        >
+          <EyeOff size={14} strokeWidth={2} /> Clean clip
+        </button>
+        <button
+          className={btn}
+          onClick={() =>
+            setAll(true, HUD_ELEMENTS.map((e) => e.on).join(";"))
+          }
+        >
+          Reset all
+        </button>
+      </div>
+
+      <p className="text-[11px] leading-relaxed text-muted">
+        Strip the HUD for clean gameplay clips. Most toggles need{" "}
+        <span className="text-sub">sv_cheats 1</span> — run Scene setup in the Cam tab
+        first (or use Clean clip, which sets it).
       </p>
     </div>
   );
