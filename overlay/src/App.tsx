@@ -143,10 +143,13 @@ function CaptureButton({ b }: { b: Bridge }) {
   );
 }
 
+const PREVIEW_SPEEDS = [0.1, 0.25, 0.5, 1] as const;
+
 function PathTab({ b }: { b: Bridge }) {
   const [drawOn, setDrawOn] = useState(false);
   const [name, setName] = useState("myshot");
   const [sel, setSel] = useState<number | null>(null);
+  const [previewSpeed, setPreviewSpeed] = useState(0.5);
   const { keyframes, send, exec } = b;
 
   const selectKf = (i: number) => {
@@ -160,12 +163,29 @@ function PathTab({ b }: { b: Bridge }) {
       <CaptureButton b={b} />
 
       <button
-        onClick={() => send({ type: "preview" })}
+        onClick={() => send({ type: "preview", timescale: previewSpeed })}
         disabled={keyframes.items.length < 2}
         className="flex w-full items-center justify-center gap-2 border border-muted py-2 text-[12px] font-semibold uppercase tracking-wide text-text transition hover:border-text disabled:opacity-40"
       >
         <Play size={15} strokeWidth={2} /> Preview shot
       </button>
+
+      <div>
+        <div className={`mb-1 ${label}`}>preview speed</div>
+        <div className="grid grid-cols-4 border border-line">
+          {PREVIEW_SPEEDS.map((s, i) => (
+            <button
+              key={s}
+              onClick={() => setPreviewSpeed(s)}
+              className={`py-1.5 text-[11px] font-medium uppercase tracking-wide transition ${
+                i < PREVIEW_SPEEDS.length - 1 ? "border-r border-line" : ""
+              } ${previewSpeed === s ? "bg-accent text-bg" : "text-sub hover:text-text"}`}
+            >
+              {s}×
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="grid grid-cols-3 border border-line">
         <button
@@ -364,7 +384,7 @@ function CameraTab({ b }: { b: Bridge }) {
             className={btn}
             onClick={() =>
               exec(
-                "sv_cheats 1;mirv_cvar_unhide_all;mirv_fix animations 1;cl_drawhud 0;cl_draw_only_deathnotices 1;cl_demo_predict 0;cl_trueview_show_status 0;r_show_build_info false",
+                "sv_cheats 1;mirv_cvar_unhide_all;mirv_fix animations 1;cl_demo_predict 0;cl_trueview_show_status 0;r_show_build_info false",
               )
             }
           >
@@ -460,9 +480,46 @@ const HUD_ELEMENTS: HudElement[] = [
   { key: "hud", label: "HUD", on: "cl_drawhud 1", off: "cl_drawhud 0", def: true },
   { key: "crosshair", label: "Crosshair", on: "crosshair 1", off: "crosshair 0", def: true },
   { key: "weapon", label: "Weapon", on: "r_drawviewmodel 1", off: "r_drawviewmodel 0", def: true },
-  { key: "killfeed", label: "Kill feed", on: "cl_drawhud_force_deathnotices -1", off: "cl_drawhud_force_deathnotices 0", def: true },
+  { key: "killfeed", label: "Kill feed", on: "cl_draw_only_deathnotices 1", off: "cl_draw_only_deathnotices 0", def: true },
   { key: "radar", label: "Radar", on: "cl_drawhud_force_radar -1", off: "cl_drawhud_force_radar 0", def: true },
   { key: "xray", label: "X-ray", on: "spec_show_xray 1", off: "spec_show_xray 0", def: true },
+];
+
+// One-tap filming modes. Each sets a coherent HUD combo and a matching
+// element-visibility snapshot so the toggles below stay in sync.
+type HudMode = {
+  key: string;
+  label: string;
+  Icon: typeof Route;
+  hint: string;
+  cmd: string;
+  vis: Record<string, boolean>;
+};
+const HUD_MODES: HudMode[] = [
+  {
+    key: "cinematic",
+    label: "Cinematic",
+    Icon: Clapperboard,
+    hint: "Totally clean frame — no HUD, no kill feed, no crosshair or weapon. Pure camera shot.",
+    cmd: "sv_cheats 1;cl_drawhud 0;cl_draw_only_deathnotices 0;crosshair 0;r_drawviewmodel 0;spec_show_xray 0",
+    vis: { hud: false, crosshair: false, weapon: false, killfeed: false, radar: false, xray: false },
+  },
+  {
+    key: "clip",
+    label: "Clip",
+    Icon: Video,
+    hint: "Gameplay clip look — HUD clutter gone, but kill feed, crosshair and weapon stay on.",
+    cmd: "sv_cheats 1;cl_drawhud 0;cl_draw_only_deathnotices 1;crosshair 1;r_drawviewmodel 1;spec_show_xray 0",
+    vis: { hud: false, crosshair: true, weapon: true, killfeed: true, radar: false, xray: false },
+  },
+  {
+    key: "full",
+    label: "Full HUD",
+    Icon: Eye,
+    hint: "Normal in-game HUD — everything drawn, back to default.",
+    cmd: "cl_drawhud 1;cl_draw_only_deathnotices 0;crosshair 1;r_drawviewmodel 1",
+    vis: { hud: true, crosshair: true, weapon: true, killfeed: true, radar: true, xray: false },
+  },
 ];
 
 function HudTab({ b }: { b: Bridge }) {
@@ -470,20 +527,49 @@ function HudTab({ b }: { b: Bridge }) {
   const [vis, setVis] = useState<Record<string, boolean>>(
     Object.fromEntries(HUD_ELEMENTS.map((e) => [e.key, e.def])),
   );
+  const [mode, setMode] = useState<string | null>(null);
 
+  const applyMode = (m: HudMode) => {
+    exec(m.cmd);
+    setVis(m.vis);
+    setMode(m.key);
+  };
   const toggle = (e: HudElement) => {
     const next = !vis[e.key];
     exec(next ? e.on : e.off);
     setVis((v) => ({ ...v, [e.key]: next }));
+    setMode(null); // manual tweak breaks the clean preset
   };
-  const setAll = (v: boolean, cmd: string) => {
-    exec(cmd);
-    setVis(Object.fromEntries(HUD_ELEMENTS.map((e) => [e.key, v])));
-  };
+
+  const activeHint = HUD_MODES.find((m) => m.key === mode)?.hint;
 
   return (
     <div className="space-y-2.5">
-      <div className={label}>toggle hud elements</div>
+      <div className={label}>mode</div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {HUD_MODES.map((m) => {
+          const on = mode === m.key;
+          return (
+            <button
+              key={m.key}
+              onClick={() => applyMode(m)}
+              className={`flex flex-col items-center gap-1.5 border px-1 py-2.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                on
+                  ? "border-accent! bg-accent text-bg"
+                  : "border-line text-sub hover:border-muted hover:text-text"
+              }`}
+            >
+              <m.Icon size={16} strokeWidth={1.75} />
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="min-h-[28px] text-[11px] leading-relaxed text-muted">
+        {activeHint ?? "Pick a filming mode, then fine-tune individual elements below."}
+      </p>
+
+      <div className={`${label} pt-0.5`}>elements</div>
       <div className="grid grid-cols-2 gap-1.5">
         {HUD_ELEMENTS.map((e) => {
           const on = vis[e.key];
@@ -502,27 +588,9 @@ function HudTab({ b }: { b: Bridge }) {
         })}
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 pt-1">
-        <button
-          className="flex items-center justify-center gap-1.5 bg-text py-2 text-[11px] font-semibold uppercase tracking-wide text-bg transition hover:bg-white"
-          onClick={() => setAll(false, "sv_cheats 1;cl_drawhud 0;crosshair 0;r_drawviewmodel 0;spec_show_xray 0")}
-        >
-          <EyeOff size={14} strokeWidth={2} /> Clean clip
-        </button>
-        <button
-          className={btn}
-          onClick={() =>
-            setAll(true, HUD_ELEMENTS.map((e) => e.on).join(";"))
-          }
-        >
-          Reset all
-        </button>
-      </div>
-
       <p className="text-[11px] leading-relaxed text-muted">
-        Strip the HUD for clean gameplay clips. Most toggles need{" "}
-        <span className="text-sub">sv_cheats 1</span> — run Scene setup in the Cam tab
-        first (or use Clean clip, which sets it).
+        Most toggles need <span className="text-sub">sv_cheats 1</span> — the modes set
+        it for you. Kill feed / radar only show with the full HUD off.
       </p>
     </div>
   );
