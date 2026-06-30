@@ -135,6 +135,14 @@ function PathTab({ b }: { b: Bridge }) {
         ● Capture keyframe
       </button>
 
+      <button
+        onClick={() => send({ type: "preview" })}
+        disabled={keyframes.items.length < 2}
+        className="w-full rounded-lg border border-accent-2/50 bg-accent-2/15 py-2.5 text-sm font-extrabold text-accent-2 hover:bg-accent-2/25 disabled:opacity-40"
+      >
+        ▶ Preview shot
+      </button>
+
       <div className="grid grid-cols-3 gap-1.5">
         <button
           onClick={() => send({ type: "enable", on: !keyframes.enabled })}
