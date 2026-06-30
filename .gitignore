@@ -18,3 +18,5 @@ out/
 recordings/
 release/
 overlay/icon-source.png
+overlay/icon-rounded.png
+overlay/src-tauri/icons/noisecam-rounded.ico

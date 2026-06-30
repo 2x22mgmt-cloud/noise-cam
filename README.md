@@ -1,7 +1,7 @@
 # Noise Cam
 
 A real-time, visual **camera-path (dolly) editor for CS2 demos**. Fly a free-cam,
-drop keyframes, and it splines a smooth cinematic path you can preview and record —
+drop keyframes, and it splines a smooth cinematic path you can preview live —
 like Airyz Advanced Dolly, but live, visual, and for CS2.
 
 Built entirely on HLAE's official mirv-script API, so **nothing gets injected into
@@ -35,6 +35,7 @@ the game.** Personal tool, still in beta (a one-click `.exe` for friends is on t
 
 ## Making a shot
 
+- **Demos tab** → browse your CS2 demos (map + date, auto-detected) and load one with a tap.
 - **Cam tab** → hit **Cam** to drop into the free camera and fly around.
 - **Capture** a keyframe at each spot to build the path (numpad `+` does the same).
 - **Preview shot** plays it back smooth and eased — pick the speed (0.1×–1×) right
@@ -42,7 +43,8 @@ the game.** Personal tool, still in beta (a one-click `.exe` for friends is on t
 - **DoF tab** → set a focus distance + aperture (f-stop) for that shallow cinematic blur.
 - **HUD tab** → one tap for **Cinematic** (totally clean), **Clip** (keeps killfeed,
   crosshair and weapon), or **Full HUD**, plus per-element toggles to fine-tune.
-- **Rec tab** → record the shot straight out (HLAE `mirv_streams`; needs FFmpeg on PATH).
+
+**Recording:** capture the CS2 window in **OBS** (or your recorder of choice).
 
 **Keys:** F7 pause · F8 reload bridge · F9 preview · numpad `+` capture ·
 `Enter` enable · `-` clear · `*` draw path

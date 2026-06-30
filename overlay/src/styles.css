@@ -61,3 +61,55 @@ input {
 [data-tauri-drag-region] {
   -webkit-app-region: drag;
 }
+
+/* Keyframe-capture toast: fade + slide up from the bottom. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.toast-in {
+  animation: toast-in 140ms ease-out;
+}
+
+/* ---------------------------------------------------------------------------
+   Phone / tablet controller (browser over the LAN). The desktop Tauri overlay
+   is a transparent floating panel; on a touch device we want a real app: solid
+   background, safe-area insets (Dynamic Island / home indicator), finger-sized
+   hit targets, and 16px inputs so iOS doesn't zoom the page on focus.
+   Targeted via `pointer: coarse` so the desktop overlay is untouched.
+--------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  html,
+  body {
+    background: var(--color-bg);
+    overscroll-behavior: none;
+  }
+
+  /* Fill the dynamic viewport (handles Safari's collapsing toolbar) and keep
+     content clear of the notch / home indicator. */
+  #root {
+    height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+      env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* Comfortable touch targets; 16px inputs prevent iOS focus-zoom. */
+  button {
+    min-height: 40px;
+  }
+  input {
+    min-height: 40px;
+    font-size: 16px;
+  }
+
+  /* Momentum scrolling on the scroll regions. */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+}

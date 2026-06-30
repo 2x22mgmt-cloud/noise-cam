@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  Aperture, Camera, CircleDot, Clapperboard, Crosshair, Disc, Eye, EyeOff, Move3d,
-  Pause, Play, Route, Send, Square, SquareTerminal, Trash2, Video, Wrench, X,
+  Aperture, Camera, CircleDot, Clapperboard, Copy, Crosshair, Download, Eye, EyeOff,
+  Film, Move3d, Pause, Play, Plug, RefreshCw, Route, Search, Send, SquareTerminal,
+  Trash2, Video, Wrench, X,
 } from "lucide-react";
-import { useBridge, isTauri, TICKRATE, type Bridge, type Keyframe } from "./useBridge";
+import { useBridge, isTauri, TICKRATE, type Bridge, type DemoInfo, type Keyframe } from "./useBridge";
 import { fmtFocal, fovToFocal, focalToFov } from "./lens";
 import { computeDof, F_STOPS } from "./dof";
 
@@ -20,49 +21,218 @@ const input =
   "w-full border border-line bg-black px-2 py-1.5 text-[11px] text-text outline-none placeholder:text-muted focus:border-accent";
 const label = "px-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-muted";
 
-type TabKey = "path" | "camera" | "dof" | "hud" | "record" | "console";
+type TabKey = "demos" | "path" | "camera" | "dof" | "hud" | "console";
 const TABS: { key: TabKey; label: string; Icon: typeof Route }[] = [
+  { key: "demos", label: "Demos", Icon: Film },
   { key: "path", label: "Path", Icon: Route },
   { key: "camera", label: "Cam", Icon: Video },
   { key: "dof", label: "DoF", Icon: Aperture },
   { key: "hud", label: "HUD", Icon: Eye },
-  { key: "record", label: "Rec", Icon: Disc },
   { key: "console", label: "", Icon: SquareTerminal },
 ];
 
 export default function App() {
   const b = useBridge();
   const [tab, setTab] = useState<TabKey>("path");
+  const [gateOff, setGateOff] = useState(false);
+
+  // Capture toast: flash a popup when the keyframe count ticks up by one (from
+  // the UI button OR the in-game numpad bind). Bulk loads / clears don't fire.
+  const [toast, setToast] = useState<string | null>(null);
+  const prevKf = useRef<number | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const c = b.keyframes.count;
+    if (prevKf.current !== null && c === prevKf.current + 1) {
+      setToast("Keyframe captured");
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 1600);
+    }
+    prevKf.current = c;
+  }, [b.keyframes.count]);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden border border-line bg-[#0a0a0a]/95">
+    <div className="flex h-full flex-col overflow-hidden border border-line bg-[#0a0a0a]/95">
       <TitleBar status={b.status} />
-      <Readout b={b} />
-      <nav className="flex border-b border-line">
-        {TABS.map((t) => {
-          const on = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`-mb-px flex flex-1 items-center justify-center gap-1.5 border-b-2 px-1 py-2 text-[11px] font-medium uppercase tracking-wide transition ${
-                on ? "border-accent text-text" : "border-transparent text-muted hover:text-sub"
-              }`}
-            >
-              <t.Icon size={15} strokeWidth={1.75} />
-              {t.label}
-            </button>
-          );
-        })}
-      </nav>
-      <div className="flex-1 overflow-y-auto p-3">
-        {tab === "path" && <PathTab b={b} />}
-        {tab === "camera" && <CameraTab b={b} />}
-        {tab === "dof" && <DofTab b={b} />}
-        {tab === "hud" && <HudTab b={b} />}
-        {tab === "record" && <RecordTab b={b} />}
-        {tab === "console" && <ConsoleTab b={b} />}
+      <div className="relative flex flex-1 flex-col overflow-hidden">
+        <Readout b={b} />
+        <nav className="flex border-b border-line">
+          {TABS.map((t) => {
+            const on = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`-mb-px flex flex-1 items-center justify-center gap-1.5 border-b-2 px-1 py-2 text-[11px] font-medium uppercase tracking-wide transition ${
+                  on ? "border-accent text-text" : "border-transparent text-muted hover:text-sub"
+                }`}
+              >
+                <t.Icon size={15} strokeWidth={1.75} />
+                {t.label}
+              </button>
+            );
+          })}
+        </nav>
+        <div className="flex-1 overflow-y-auto overscroll-contain p-3">
+          {tab === "demos" && <DemosTab b={b} />}
+          {tab === "path" && <PathTab b={b} />}
+          {tab === "camera" && <CameraTab b={b} />}
+          {tab === "dof" && <DofTab b={b} />}
+          {tab === "hud" && <HudTab b={b} />}
+          {tab === "console" && <ConsoleTab b={b} />}
+        </div>
+        {!b.status.hlae && !gateOff && <BridgeGate b={b} onDismiss={() => setGateOff(true)} />}
+
+        {toast && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center px-3">
+            <div className="toast-in flex items-center gap-2 border border-accent bg-accent px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-bg">
+              <CircleDot size={13} strokeWidth={2.5} /> {toast}
+            </div>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------- bridge gate */
+// Shown until CS2/HLAE actually connects — so nobody forgets to load the bridge.
+// Clears itself the instant `status.hlae` flips true (i.e. after `exec noisecam`).
+function BridgeGate({ b, onDismiss }: { b: Bridge; onDismiss: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const [install, setInstall] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [installMsg, setInstallMsg] = useState("");
+  const [installed, setInstalled] = useState<boolean | null>(null); // null = checking
+  const desktop = isTauri();
+
+  // Don't prompt to install if the cfg + bridge are already in CS2's cfg folder.
+  useEffect(() => {
+    if (!desktop) {
+      setInstalled(false);
+      return;
+    }
+    b.bridgeInstalled().then(setInstalled);
+  }, [b.bridgeInstalled, desktop]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText("exec noisecam");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard can be blocked (e.g. phone over http) — command is shown anyway */
+    }
+  };
+  const doInstall = async () => {
+    setInstall("busy");
+    try {
+      const dir = await b.installBridge();
+      setInstallMsg(dir);
+      setInstall("done");
+      setInstalled(true);
+    } catch (e) {
+      setInstallMsg(String(e instanceof Error ? e.message : e));
+      setInstall("error");
+    }
+  };
+  const isInstalled = installed === true || install === "done";
+  const checking = installed === null;
+  const recent = b.log.slice(-3);
+  const Step = ({ n }: { n: number }) => (
+    <span className="flex h-4 w-4 shrink-0 items-center justify-center bg-line text-[9px] font-bold text-text">
+      {n}
+    </span>
+  );
+
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3.5 overflow-y-auto bg-[#0a0a0a]/97 px-5 py-6 text-center backdrop-blur-sm">
+      <button
+        onClick={onDismiss}
+        className="absolute right-2 top-2 text-muted transition hover:text-text"
+        title="Dismiss (you can set up later)"
+      >
+        <X size={15} />
+      </button>
+
+      <img src="/logo.png" alt="" className="pointer-events-none h-6 w-auto opacity-90" />
+      <div className="flex items-center justify-center gap-2 text-[13px] font-semibold uppercase tracking-wide text-text">
+        <Plug size={15} strokeWidth={2} /> Set up Noise Cam
+      </div>
+
+      {/* Step 1 — desktop only: write the cfg + bridge into CS2 for them.
+          If it's already installed we show a quiet ✓ instead of an install prompt. */}
+      {desktop && (
+        <div className="w-full max-w-[280px] space-y-1.5">
+          <div className="flex items-center gap-1.5 text-left text-[11px] text-sub">
+            <Step n={1} /> {isInstalled ? "Bridge installed in CS2" : "Install the bridge into CS2 (one click)"}
+          </div>
+          <button
+            onClick={doInstall}
+            disabled={install === "busy" || checking}
+            className={
+              isInstalled
+                ? "flex w-full items-center justify-center gap-2 border border-line py-2.5 text-[12px] font-medium uppercase tracking-wide text-sub transition hover:border-muted hover:text-text disabled:opacity-50"
+                : "flex w-full items-center justify-center gap-2 bg-accent py-2.5 text-[12px] font-semibold uppercase tracking-wide text-bg transition hover:bg-white disabled:opacity-50"
+            }
+          >
+            <Download size={14} strokeWidth={2.5} />
+            {checking
+              ? "checking…"
+              : install === "busy"
+                ? "installing…"
+                : isInstalled
+                  ? "Installed ✓ — re-install"
+                  : "Install to CS2"}
+          </button>
+          {install === "done" && (
+            <p className="break-all text-left text-[10px] leading-relaxed text-muted">
+              wrote bridge + cfg to <span className="text-sub">{installMsg}</span>
+            </p>
+          )}
+          {install === "error" && (
+            <p className="text-left text-[10px] leading-relaxed text-danger">
+              {installMsg} — drop <span className="font-mono">noisecam.cfg</span> into{" "}
+              <span className="font-mono">csgo\cfg</span> manually instead.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Step 2 — run the loader once in CS2 (works at the main menu). */}
+      <div className="w-full max-w-[280px] space-y-1.5">
+        <div className="flex items-center gap-1.5 text-left text-[11px] text-sub">
+          {desktop && <Step n={2} />}
+          {desktop ? "In the CS2 console (menu is fine), run:" : "On the PC, in the CS2 console, run:"}
+        </div>
+        <button
+          onClick={copy}
+          className="flex w-full items-center justify-between gap-2 border border-accent/60 bg-black px-3 py-2.5 font-mono text-[12px] text-accent transition hover:border-accent"
+          title="Copy command"
+        >
+          <span>exec noisecam</span>
+          <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted">
+            {copied ? "copied" : <><Copy size={12} /> copy</>}
+          </span>
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2 text-[11px] text-sub">
+        <span className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-ping bg-accent opacity-60" />
+          <span className="relative inline-flex h-2 w-2 bg-accent" />
+        </span>
+        {b.status.text}
+      </div>
+
+      {recent.length > 0 && (
+        <div className="w-full max-w-[280px] border border-line bg-black/60 p-2 text-left font-mono text-[10px] leading-relaxed text-muted">
+          {recent.map((l, i) => (
+            <div key={i} className="truncate">{l.msg}</div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-[10px] text-muted">Closes automatically once CS2 connects.</p>
     </div>
   );
 }
@@ -140,6 +310,124 @@ function CaptureButton({ b }: { b: Bridge }) {
     >
       <CircleDot size={16} strokeWidth={2} /> Capture keyframe
     </button>
+  );
+}
+
+/* ----------------------------------------------------------------- Demos */
+function DemosTab({ b }: { b: Bridge }) {
+  const [demos, setDemos] = useState<DemoInfo[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [q, setQ] = useState("");
+  const [loaded, setLoaded] = useState<string | null>(null);
+
+  const refresh = () => {
+    setLoading(true);
+    b.listDemos().then((d) => {
+      setDemos(d);
+      setLoading(false);
+    });
+  };
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    b.listDemos().then((d) => {
+      if (alive) {
+        setDemos(d);
+        setLoading(false);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [b.listDemos]);
+
+  const load = (d: DemoInfo) => {
+    b.exec(`playdemo "${d.arg}"`);
+    setLoaded(d.arg);
+  };
+
+  const fmtDate = (s: number) =>
+    s ? new Date(s * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
+  const fmtSize = (mb: number) =>
+    mb >= 1000 ? (mb / 1024).toFixed(1) + " GB" : Math.round(mb) + " MB";
+
+  const list = (demos ?? []).filter(
+    (d) => !q || (d.map + " " + d.file).toLowerCase().includes(q.toLowerCase()),
+  );
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-center gap-1.5">
+        <div className="relative flex-1">
+          <Search
+            size={13}
+            className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted"
+          />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="filter demos…"
+            className={`${input} pl-7`}
+          />
+        </div>
+        <button className={btn} onClick={refresh} disabled={loading} title="Rescan">
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+        </button>
+      </div>
+
+      {!b.status.hlae && (
+        <p className="border border-line bg-black/40 p-2 text-[11px] leading-relaxed text-muted">
+          Loading runs <span className="text-sub">playdemo</span> in CS2 — connect the bridge first.
+          You can <span className="text-sub">exec noisecam</span> at the CS2 main menu, then pick a
+          demo here.
+        </p>
+      )}
+
+      <div className={`px-0.5 ${label}`}>
+        {loading ? "scanning…" : `${list.length} demo${list.length === 1 ? "" : "s"}`}
+      </div>
+
+      <div className="space-y-1">
+        {list.map((d) => {
+          const on = loaded === d.arg;
+          return (
+            <button
+              key={d.arg}
+              onClick={() => load(d)}
+              className={`flex w-full items-center gap-2 border px-2.5 py-2 text-left transition ${
+                on
+                  ? "border-accent! text-text"
+                  : "border-line text-sub hover:border-muted hover:text-text"
+              }`}
+            >
+              <Play size={13} className={on ? "text-accent" : "text-muted"} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[12px] font-medium uppercase tracking-wide">
+                    {d.map || "demo"}
+                  </span>
+                  {on && (
+                    <span className="text-[9px] uppercase tracking-wide text-accent">loaded</span>
+                  )}
+                </div>
+                <div className="truncate font-mono text-[10px] text-muted">{d.file}</div>
+              </div>
+              <div className="shrink-0 text-right font-mono text-[10px] text-muted">
+                <div>{fmtDate(d.modified)}</div>
+                <div>{fmtSize(d.size_mb)}</div>
+              </div>
+            </button>
+          );
+        })}
+        {demos !== null && !loading && list.length === 0 && (
+          <p className="px-0.5 py-4 text-center text-[11px] leading-relaxed text-muted">
+            {demos.length === 0
+              ? "No demos found. Demos live in csgo\\replays — is CS2 installed via Steam?"
+              : "No demos match that filter."}
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -409,19 +697,49 @@ function DofTab({ b }: { b: Bridge }) {
   const focalMm = fovToFocal(b.cam?.view?.fov) ?? 50;
   const [focus, setFocus] = useState("512");
   const [fstop, setFstop] = useState(2.8);
+  const [on, setOn] = useState(false);
 
   const focusN = Math.max(Number(focus) || 0, 0);
   const p = computeDof(focusN, fstop, focalMm);
   const r = (n: number) => Math.round(n);
-  const apply = () =>
+  const farTxt = (n: number) => (n >= 100000 ? "∞" : String(r(n)));
+
+  // Live DoF — push the override planes as the slider / aperture move so focus
+  // racks in real time. Throttled (~25/s) with a trailing send, so dragging
+  // doesn't flood the socket but always lands on the value you let go on.
+  const lastSent = useRef(0);
+  const trailing = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sendDof = (fcs: number, fst: number) => {
+    const q = computeDof(Math.max(fcs, 0), fst, focalMm);
     b.exec(
       `r_dof_override 1;` +
-        `r_dof_override_near_blurry ${r(p.nearBlurry)};` +
-        `r_dof_override_near_crisp ${r(p.nearCrisp)};` +
-        `r_dof_override_far_crisp ${r(p.farCrisp)};` +
-        `r_dof_override_far_blurry ${r(p.farBlurry)}`,
+        `r_dof_override_near_blurry ${r(q.nearBlurry)};` +
+        `r_dof_override_near_crisp ${r(q.nearCrisp)};` +
+        `r_dof_override_far_crisp ${r(q.farCrisp)};` +
+        `r_dof_override_far_blurry ${r(q.farBlurry)}`,
     );
-  const farTxt = (n: number) => (n >= 100000 ? "∞" : String(r(n)));
+    setOn(true);
+  };
+  const liveDof = (fcs: number, fst: number) => {
+    if (trailing.current) clearTimeout(trailing.current);
+    const gap = 40;
+    const now = Date.now();
+    if (now - lastSent.current >= gap) {
+      lastSent.current = now;
+      sendDof(fcs, fst);
+    } else {
+      trailing.current = setTimeout(() => {
+        lastSent.current = Date.now();
+        trailing.current = null;
+        sendDof(fcs, fst);
+      }, gap);
+    }
+  };
+  const disableDof = () => {
+    if (trailing.current) clearTimeout(trailing.current);
+    b.exec("r_dof_override 0");
+    setOn(false);
+  };
 
   return (
     <div className="space-y-3">
@@ -432,7 +750,7 @@ function DofTab({ b }: { b: Bridge }) {
         </div>
         <input
           type="range" min={16} max={4000} step={4} value={focusN}
-          onChange={(e) => setFocus(e.target.value)}
+          onChange={(e) => { setFocus(e.target.value); liveDof(Number(e.target.value), fstop); }}
           className="w-full accent-[var(--color-accent)]"
         />
       </div>
@@ -443,7 +761,7 @@ function DofTab({ b }: { b: Bridge }) {
           {F_STOPS.map((n) => (
             <button
               key={n}
-              onClick={() => setFstop(n)}
+              onClick={() => { setFstop(n); if (on) liveDof(focusN, n); }}
               className={`${btn} ${fstop === n ? btnActive : ""}`}
             >
               f/{n}
@@ -453,8 +771,13 @@ function DofTab({ b }: { b: Bridge }) {
       </div>
 
       <div className="grid grid-cols-2 gap-1.5">
-        <button className={`${btn} ${btnActive}`} onClick={apply}><Aperture size={13} /> Apply</button>
-        <button className={btn} onClick={() => b.exec("r_dof_override 0")}>DoF off</button>
+        <button
+          className={`${btn} ${on ? btnActive : ""}`}
+          onClick={() => (on ? disableDof() : liveDof(focusN, fstop))}
+        >
+          <Aperture size={13} /> {on ? "DoF on" : "Enable DoF"}
+        </button>
+        <button className={btn} onClick={disableDof}>DoF off</button>
       </div>
 
       <div className="border border-line p-2.5 font-mono text-[11px] text-muted">
@@ -467,8 +790,8 @@ function DofTab({ b }: { b: Bridge }) {
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted">
-        Set where the subject is sharp and how shallow the look is — the engine
-        planes are computed from lens optics.
+        Drag the slider and focus racks live in-game. Set where the subject is
+        sharp and how shallow the look is — planes are computed from lens optics.
       </p>
     </div>
   );
@@ -592,108 +915,6 @@ function HudTab({ b }: { b: Bridge }) {
         Most toggles need <span className="text-sub">sv_cheats 1</span> — the modes set
         it for you. Kill feed / radar only show with the full HUD off.
       </p>
-    </div>
-  );
-}
-
-/* ---------------------------------------------------------------- Record */
-function RecordTab({ b }: { b: Bridge }) {
-  const { keyframes, send, exec } = b;
-  const [folder, setFolder] = useState("D:\\noisecam\\recordings");
-  const [fps, setFps] = useState("60");
-  const [crf, setCrf] = useState("16");
-  const [recording, setRecording] = useState(false);
-  const endTick = useRef<number | null>(null);
-
-  const ticks = keyframes.items
-    .map((k) => (typeof k.tick === "number" ? k.tick : undefined))
-    .filter((t): t is number => typeof t === "number");
-  const startTick = ticks.length ? Math.min(...ticks) : null;
-  const lastTick = ticks.length ? Math.max(...ticks) : null;
-
-  const applySettings = () => {
-    const preset = "noisecam_h264";
-    exec(
-      [
-        `mirv_streams record name "${folder}"`,
-        `host_framerate ${fps}`,
-        `mirv_streams settings add ffmpeg ${preset} ` +
-          `"-c:v libx264 -preset slow -crf ${crf} -pix_fmt yuv420p {QUOTE}{AFX_STREAM_PATH}.mp4{QUOTE}"`,
-        `mirv_streams edit afxDefault settings ${preset}`,
-      ].join(";"),
-    );
-  };
-  const start = () => {
-    exec("mirv_streams record start");
-    setRecording(true);
-    endTick.current = null;
-  };
-  const stop = () => {
-    exec("mirv_streams record end;host_framerate 0");
-    setRecording(false);
-    endTick.current = null;
-  };
-  const recordCampath = () => {
-    if (startTick == null || lastTick == null) {
-      b.exec("// no keyframes to record — capture a path first");
-      return;
-    }
-    send({ type: "enable", on: true });
-    exec("demo_gototick " + startTick);
-    exec("mirv_streams record start");
-    exec("demo_resume");
-    endTick.current = lastTick;
-    setRecording(true);
-  };
-
-  const liveTick = b.cam?.demoTick;
-  useEffect(() => {
-    if (recording && endTick.current != null && typeof liveTick === "number") {
-      if (liveTick >= endTick.current) stop();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveTick]);
-
-  const field = (lbl: string, value: string, set: (v: string) => void, type = "text") => (
-    <label className="flex flex-col gap-1">
-      <span className={label}>{lbl}</span>
-      <input className={input} type={type} value={value} onChange={(e) => set(e.target.value)} />
-    </label>
-  );
-
-  return (
-    <div className="space-y-2.5">
-      {field("output folder", folder, setFolder)}
-      <div className="grid grid-cols-2 gap-2">
-        {field("fps", fps, setFps, "number")}
-        {field("quality (crf)", crf, setCrf, "number")}
-      </div>
-      <button className={`${btn} w-full`} onClick={applySettings}>Apply recording settings</button>
-
-      <button
-        onClick={recordCampath}
-        disabled={!keyframes.items.length}
-        className="flex w-full items-center justify-center gap-2 border border-danger py-2.5 text-[12px] font-semibold uppercase tracking-wide text-danger transition hover:bg-danger/10 disabled:opacity-40"
-      >
-        <Disc size={15} strokeWidth={2} /> Record this campath
-      </button>
-
-      <div className="grid grid-cols-2 gap-1.5">
-        <button className={`${btn} ${recording ? btnActive : ""}`} onClick={start}><Disc size={13} /> Start</button>
-        <button className={`${btn} ${btnDanger}`} onClick={stop}><Square size={13} /> Stop</button>
-      </div>
-
-      <div className="border border-line p-2.5 text-[11px] leading-relaxed text-muted">
-        {recording ? (
-          <span className="text-danger">
-            ● recording{endTick.current != null ? ` → auto-stop at tick ${endTick.current}` : ""}
-          </span>
-        ) : startTick != null ? (
-          <>Path spans tick {startTick} → {lastTick}. FFmpeg must be on PATH / in HLAE.</>
-        ) : (
-          <>Capture a path first, then record it. Needs FFmpeg (HLAE).</>
-        )}
-      </div>
     </div>
   );
 }

@@ -36,6 +36,13 @@ export type Keyframes = { count: number; enabled: boolean; items: Keyframe[] };
 
 export type Status = { hlae: boolean; text: string };
 export type LogLine = { t: string; msg: string };
+export type DemoInfo = {
+  file: string;
+  arg: string;
+  map: string;
+  size_mb: number;
+  modified: number;
+};
 
 export type Bridge = {
   status: Status;
@@ -44,6 +51,9 @@ export type Bridge = {
   log: LogLine[];
   send: (obj: Record<string, unknown>) => void;
   exec: (cmd: string) => void;
+  listDemos: () => Promise<DemoInfo[]>;
+  installBridge: () => Promise<string>;
+  bridgeInstalled: () => Promise<boolean>;
 };
 
 export function useBridge(): Bridge {
@@ -86,6 +96,19 @@ export function useBridge(): Bridge {
     },
     [send, pushLog],
   );
+
+  // Demo list: desktop reads the disk via the Tauri command; phone/browser
+  // fetches the relay's /demos endpoint (same data, served by the hub).
+  const listDemos = useCallback(async (): Promise<DemoInfo[]> => {
+    try {
+      if (isTauri()) return await invoke<DemoInfo[]>("list_demos");
+      const res = await fetch("/demos");
+      return (await res.json()) as DemoInfo[];
+    } catch (err) {
+      pushLog("demo scan failed: " + String(err));
+      return [];
+    }
+  }, [pushLog]);
 
   // Shared message handling (HLAE cam/keyframes, plus status over the browser WS).
   const handleMsg = useCallback((raw: string) => {
@@ -161,5 +184,21 @@ export function useBridge(): Bridge {
     };
   }, [handleMsg]);
 
-  return { status, cam, keyframes, log, send, exec };
+  // One-click setup: ask the desktop app to drop the bridge + cfg into CS2.
+  const installBridge = useCallback(async (): Promise<string> => {
+    if (!isTauri()) throw new Error("Run the install from the desktop app.");
+    return await invoke<string>("install_bridge");
+  }, []);
+  const bridgeInstalled = useCallback(async (): Promise<boolean> => {
+    if (!isTauri()) return false;
+    try {
+      return await invoke<boolean>("bridge_installed");
+    } catch {
+      return false;
+    }
+  }, []);
+
+  return {
+    status, cam, keyframes, log, send, exec, listDemos, installBridge, bridgeInstalled,
+  };
 }

@@ -21,7 +21,7 @@ use axum::extract::State;
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use axum::Router;
+use axum::{Json, Router};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use include_dir::{include_dir, Dir};
@@ -74,6 +74,7 @@ pub fn start(app: AppHandle, relay: RelayState) {
         let router = Router::new()
             .route("/mirv", get(mirv_ws))
             .route("/ui", get(ui_ws))
+            .route("/demos", get(demos_handler))
             .fallback(static_handler)
             .with_state(state);
 
@@ -169,6 +170,13 @@ async fn handle_browser(socket: WebSocket, s: AppState) {
         }
     }
     send_task.abort();
+}
+
+/* ------------------------------------------------------------ demo list */
+/// GET /demos — the CS2 demo list, for phone/browser clients (the desktop
+/// overlay uses the `list_demos` Tauri command instead).
+async fn demos_handler() -> Json<Vec<crate::demos::DemoInfo>> {
+    Json(crate::demos::list())
 }
 
 /* ------------------------------------------------------------- static UI */
