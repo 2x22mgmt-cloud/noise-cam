@@ -109,6 +109,7 @@ const keyframes = (globalThis.__cs2_dolly && Array.isArray(globalThis.__cs2_doll
 let enabledState = false;      // our view of campath enabled (toggled by enable/disable)
 let playMode = false;          // when true, the BRIDGE drives the camera along the path
 let playOffset = null;          // (continuous game time − quantized demo time), sampled once per enable
+let easeMode = true;           // ease-in/out across the whole shot (smooth start/stop)
 let lastView = null;           // latest free-cam view {x,y,z,rX,rY,rZ,fov}
 
 // --- Path interpolation (bridge-driven playback) ----------------------------
@@ -122,6 +123,15 @@ function catmull(p0, p1, p2, p3, f) {
 	const f2 = f * f, f3 = f2 * f;
 	return 0.5 * ((2 * p1) + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f2 + (-p0 + 3 * p1 - 3 * p2 + p3) * f3);
 }
+// Catmull-Rom on ANGLES: unwrap the control points around p1 first so the spline
+// doesn't blow up across the ±180° seam, then spline normally.
+function catmullAngle(p0, p1, p2, p3, f) {
+	const u = (ref, a) => ref + (((a - ref + 540) % 360) - 180);
+	const q0 = u(p1, p0), q2 = u(p1, p2), q3 = u(q2, p3);
+	return catmull(q0, p1, q2, q3, f);
+}
+// Smoothstep ease-in/out across the whole shot (slow start, slow stop).
+function smoothstep(g) { g = g < 0 ? 0 : g > 1 ? 1 : g; return g * g * (3 - 2 * g); }
 function evalPath(t) {
 	// Interpolate by CONTINUOUS demo time (seconds), not the integer demo tick —
 	// the tick only advances 64/s, which makes the camera step (very visible in
@@ -135,15 +145,20 @@ function evalPath(t) {
 			if (!a.pos || !b.pos || !a.ang || typeof a.ang.rX !== 'number' || typeof b.ang.rX !== 'number') return null;
 			const span = (b.time - a.time) || 1e-6;
 			const f = (t - a.time) / span;
-			// Catmull-Rom on POSITION (smooth arcs); neighbours clamp at the ends.
-			const p0 = (ks[i - 1] && ks[i - 1].pos) ? ks[i - 1].pos : a.pos;
-			const p3 = (ks[i + 2] && ks[i + 2].pos) ? ks[i + 2].pos : b.pos;
+			// Catmull-Rom on position, angles AND fov; clamp neighbours at the ends.
+			const k0 = ks[i - 1] || a, k3 = ks[i + 2] || b;
+			const p0 = k0.pos || a.pos, p3 = k3.pos || b.pos;
+			const g0 = k0.ang || a.ang, g3 = k3.ang || b.ang;
+			const fov0 = typeof k0.fov === 'number' ? k0.fov : a.fov;
+			const fov3 = typeof k3.fov === 'number' ? k3.fov : b.fov;
 			return {
 				x: catmull(p0.x, a.pos.x, b.pos.x, p3.x, f),
 				y: catmull(p0.y, a.pos.y, b.pos.y, p3.y, f),
 				z: catmull(p0.z, a.pos.z, b.pos.z, p3.z, f),
-				rX: lerpAngle(a.ang.rX, b.ang.rX, f), rY: lerpAngle(a.ang.rY, b.ang.rY, f), rZ: lerpAngle(a.ang.rZ, b.ang.rZ, f),
-				fov: lerp(a.fov, b.fov, f),
+				rX: catmullAngle(g0.rX, a.ang.rX, b.ang.rX, g3.rX, f),
+				rY: catmullAngle(g0.rY, a.ang.rY, b.ang.rY, g3.rY, f),
+				rZ: catmullAngle(g0.rZ, a.ang.rZ, b.ang.rZ, g3.rZ, f),
+				fov: catmull(fov0, a.fov, b.fov, fov3, f),
 			};
 		}
 	}
@@ -223,6 +238,7 @@ function handleIncoming(msg) {
 			pushKeyframes();
 			break;
 		case 'preview': previewShot(typeof obj.timescale === 'number' ? obj.timescale : undefined); break;
+		case 'ease': easeMode = !!obj.on; pushKeyframes(); break;
 		case 'draw':
 			// Richer, more-visible draw: path + camera icons + axes + big index labels.
 			// (CS2's drawer has no line-thickness option; these markers help most.)
@@ -329,7 +345,13 @@ mirv.events.cViewRenderSetupView.on(VIEW_ID, (e) => {
 		const gt = e.curTime;
 		const dt = (typeof mirv.getDemoTime === 'function') ? mirv.getDemoTime() : null;
 		if (playOffset === null && typeof gt === 'number' && typeof dt === 'number') playOffset = gt - dt;
-		const t = (typeof gt === 'number' && playOffset !== null) ? (gt - playOffset) : dt;
+		let t = (typeof gt === 'number' && playOffset !== null) ? (gt - playOffset) : dt;
+		// Ease-in/out: remap the playhead's progress across the whole shot with a
+		// smoothstep so the camera accelerates from rest and decelerates to a stop.
+		if (easeMode && typeof t === 'number' && keyframes.length >= 2) {
+			const t0 = keyframes[0].time, t1 = keyframes[keyframes.length - 1].time;
+			if (t1 > t0) t = t0 + smoothstep((t - t0) / (t1 - t0)) * (t1 - t0);
+		}
 		const view = evalPath(t);
 		if (view) {
 			// Breadcrumb logs both clocks so we can confirm gt is continuous.
@@ -370,5 +392,5 @@ globalThis.__cs2_dolly = {
 	keyframes, // persisted so a reload keeps the editor-side keyframe list
 };
 
-mirv.message('[dolly] bridge v17 LOADED (one-tap Preview + Catmull-Rom spline) — look for v17');
+mirv.message('[dolly] bridge v18 LOADED (spline on angle+fov, ease-in/out) — look for v18');
 } // end wrapper block (keeps declarations out of the persistent global scope)
