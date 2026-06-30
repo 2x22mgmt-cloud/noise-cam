@@ -116,6 +116,12 @@ let lastView = null;           // latest free-cam view {x,y,z,rX,rY,rZ,fov}
 // we interpolate the captured keyframes ourselves and return the view each frame.
 function lerp(a, b, f) { return a + (b - a) * f; }
 function lerpAngle(a, b, f) { const d = ((((b - a) % 360) + 540) % 360) - 180; return a + d * f; }
+// Catmull-Rom spline through p1→p2 using neighbours p0,p3 — smooth curves through
+// the keyframes (no hard corners). Used for position so the dolly arcs naturally.
+function catmull(p0, p1, p2, p3, f) {
+	const f2 = f * f, f3 = f2 * f;
+	return 0.5 * ((2 * p1) + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f2 + (-p0 + 3 * p1 - 3 * p2 + p3) * f3);
+}
 function evalPath(t) {
 	// Interpolate by CONTINUOUS demo time (seconds), not the integer demo tick —
 	// the tick only advances 64/s, which makes the camera step (very visible in
@@ -129,8 +135,13 @@ function evalPath(t) {
 			if (!a.pos || !b.pos || !a.ang || typeof a.ang.rX !== 'number' || typeof b.ang.rX !== 'number') return null;
 			const span = (b.time - a.time) || 1e-6;
 			const f = (t - a.time) / span;
+			// Catmull-Rom on POSITION (smooth arcs); neighbours clamp at the ends.
+			const p0 = (ks[i - 1] && ks[i - 1].pos) ? ks[i - 1].pos : a.pos;
+			const p3 = (ks[i + 2] && ks[i + 2].pos) ? ks[i + 2].pos : b.pos;
 			return {
-				x: lerp(a.pos.x, b.pos.x, f), y: lerp(a.pos.y, b.pos.y, f), z: lerp(a.pos.z, b.pos.z, f),
+				x: catmull(p0.x, a.pos.x, b.pos.x, p3.x, f),
+				y: catmull(p0.y, a.pos.y, b.pos.y, p3.y, f),
+				z: catmull(p0.z, a.pos.z, b.pos.z, p3.z, f),
 				rX: lerpAngle(a.ang.rX, b.ang.rX, f), rY: lerpAngle(a.ang.rY, b.ang.rY, f), rZ: lerpAngle(a.ang.rZ, b.ang.rZ, f),
 				fov: lerp(a.fov, b.fov, f),
 			};
@@ -174,6 +185,21 @@ function pushKeyframes() {
 	send({ type: 'keyframes', count: keyframes.length, enabled: enabledState, items: keyframes.slice() });
 }
 
+// One-tap preview: enable bridge-driven playback, seek to the first keyframe, set a
+// watchable slow-mo, and play — the whole "show me the shot" sequence in one go.
+function previewShot(ts) {
+	if (keyframes.length < 2 || typeof keyframes[0].tick !== 'number') {
+		send({ type: 'log', msg: '[preview] need at least 2 keyframes' });
+		return;
+	}
+	playMode = true;
+	enabledState = true;
+	playOffset = null; // re-sample the game↔demo offset after the seek
+	const speed = (typeof ts === 'number' && ts > 0) ? ts : 0.5;
+	mirv.exec('mirv_campath enabled 0;demo_timescale ' + speed + ';demo_gototick ' + keyframes[0].tick + ';demo_resume');
+	pushKeyframes();
+}
+
 // --- Handle commands from the editor ----------------------------------------
 function handleIncoming(msg) {
 	if (typeof msg !== 'string') return;
@@ -196,6 +222,7 @@ function handleIncoming(msg) {
 			try { mirv.exec('mirv_campath enabled 0'); } catch (_) {}
 			pushKeyframes();
 			break;
+		case 'preview': previewShot(typeof obj.timescale === 'number' ? obj.timescale : undefined); break;
 		case 'draw':
 			// Richer, more-visible draw: path + camera icons + axes + big index labels.
 			// (CS2's drawer has no line-thickness option; these markers help most.)
@@ -321,12 +348,13 @@ const dollyCmd = new AdvancedfxConCommand((args) => {
 	const sub = args.argC() > 1 ? args.argV(1) : '';
 	switch (sub) {
 		case 'capture': captureKeyframe(); break;
-		case 'clear':   mirv.exec('mirv_campath clear'); break;
-		case 'enable':  mirv.exec('mirv_campath enabled 1'); break;
-		case 'disable': mirv.exec('mirv_campath enabled 0'); break;
+		case 'preview': previewShot(); break;
+		case 'clear':   mirv.exec('mirv_campath clear'); keyframes.length = 0; break;
+		case 'enable':  playMode = true; enabledState = true; playOffset = null; break;
+		case 'disable': playMode = false; enabledState = false; break;
 		case 'draw':    mirv.exec('mirv_campath draw enabled 1;mirv_campath draw keyCam 1;mirv_campath draw keyAxis 1;mirv_campath draw keyIndex 16'); break;
 		case 'drawoff': mirv.exec('mirv_campath draw enabled 0'); break;
-		default: mirv.message('[dolly] usage: mirv_dolly capture|clear|enable|disable|draw|drawoff');
+		default: mirv.message('[dolly] usage: mirv_dolly capture|preview|clear|enable|disable|draw|drawoff');
 	}
 });
 try { dollyCmd.register('mirv_dolly', 'Noise Cam editor commands'); }
@@ -342,5 +370,5 @@ globalThis.__cs2_dolly = {
 	keyframes, // persisted so a reload keeps the editor-side keyframe list
 };
 
-mirv.message('[dolly] bridge v16 LOADED (smooth playback via continuous render clock) — look for v16');
+mirv.message('[dolly] bridge v17 LOADED (one-tap Preview + Catmull-Rom spline) — look for v17');
 } // end wrapper block (keeps declarations out of the persistent global scope)
