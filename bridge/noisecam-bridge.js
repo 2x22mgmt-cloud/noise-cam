@@ -115,16 +115,19 @@ let lastView = null;           // latest free-cam view {x,y,z,rX,rY,rZ,fov}
 // we interpolate the captured keyframes ourselves and return the view each frame.
 function lerp(a, b, f) { return a + (b - a) * f; }
 function lerpAngle(a, b, f) { const d = ((((b - a) % 360) + 540) % 360) - 180; return a + d * f; }
-function evalPath(tick) {
-	if (keyframes.length < 2 || typeof tick !== 'number') return null;
-	const ks = keyframes; // kept sorted by tick
-	if (tick < ks[0].tick || tick > ks[ks.length - 1].tick) return null; // outside the path
+function evalPath(t) {
+	// Interpolate by CONTINUOUS demo time (seconds), not the integer demo tick —
+	// the tick only advances 64/s, which makes the camera step (very visible in
+	// slow-mo); demo time is sub-tick so the move is smooth per render frame.
+	if (keyframes.length < 2 || typeof t !== 'number') return null;
+	const ks = keyframes; // sorted by tick, i.e. also by time
+	if (t < ks[0].time || t > ks[ks.length - 1].time) return null; // outside the path
 	for (let i = 0; i < ks.length - 1; i++) {
 		const a = ks[i], b = ks[i + 1];
-		if (tick >= a.tick && tick <= b.tick) {
+		if (t >= a.time && t <= b.time) {
 			if (!a.pos || !b.pos || !a.ang || typeof a.ang.rX !== 'number' || typeof b.ang.rX !== 'number') return null;
-			const span = (b.tick - a.tick) || 1;
-			const f = (tick - a.tick) / span;
+			const span = (b.time - a.time) || 1e-6;
+			const f = (t - a.time) / span;
 			return {
 				x: lerp(a.pos.x, b.pos.x, f), y: lerp(a.pos.y, b.pos.y, f), z: lerp(a.pos.z, b.pos.z, f),
 				rX: lerpAngle(a.ang.rX, b.ang.rX, f), rY: lerpAngle(a.ang.rY, b.ang.rY, f), rZ: lerpAngle(a.ang.rZ, b.ang.rZ, f),
@@ -290,11 +293,11 @@ mirv.events.cViewRenderSetupView.on(VIEW_ID, (e) => {
 	// interpolated at the current demo tick. Returning a view here overrides the
 	// camera (same mechanism as HLAE's own mirv_script_view/fov snippets).
 	if (playMode) {
-		const t = (typeof mirv.getDemoTick === 'function') ? mirv.getDemoTick() : null;
+		const t = (typeof mirv.getDemoTime === 'function') ? mirv.getDemoTime() : null;
 		const view = evalPath(t);
 		if (view) {
 			// Throttled breadcrumb so we can verify the camera tracks the path.
-			if (frame % 16 === 0) send({ type: 'log', msg: '[play] tick=' + t + ' pos=' + Math.round(view.x) + ',' + Math.round(view.y) + ',' + Math.round(view.z) + ' fov=' + Math.round(view.fov) });
+			if (frame % 16 === 0) send({ type: 'log', msg: '[play] t=' + (typeof t === 'number' ? t.toFixed(2) : t) + ' pos=' + Math.round(view.x) + ',' + Math.round(view.y) + ',' + Math.round(view.z) + ' fov=' + Math.round(view.fov) });
 			return view; // <-- drives the camera along the dolly
 		}
 	}
@@ -330,5 +333,5 @@ globalThis.__cs2_dolly = {
 	keyframes, // persisted so a reload keeps the editor-side keyframe list
 };
 
-mirv.message('[dolly] bridge v14 LOADED (BRIDGE-DRIVEN playback — bridge flies the camera itself) — look for v14');
+mirv.message('[dolly] bridge v15 LOADED (smooth playback — interpolate by continuous demo time) — look for v15');
 } // end wrapper block (keeps declarations out of the persistent global scope)
