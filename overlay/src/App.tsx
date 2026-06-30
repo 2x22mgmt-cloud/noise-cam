@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Aperture, Camera, CircleDot, Clapperboard, Crosshair, Disc, Move3d,
-  Pause, Play, Radio, Route, Send, Square, SquareTerminal, Trash2, Video, Wrench, X,
+  Pause, Play, Route, Send, Square, SquareTerminal, Trash2, Video, Wrench, X,
 } from "lucide-react";
 import { useBridge, isTauri, TICKRATE, type Bridge, type Keyframe } from "./useBridge";
 import { fmtFocal, fovToFocal, focalToFov } from "./lens";
@@ -69,7 +69,7 @@ export default function App() {
 function TitleBar({ status }: { status: Bridge["status"] }) {
   return (
     <header data-tauri-drag-region className="flex items-center gap-2 border-b border-line px-3 py-2">
-      <Radio size={17} strokeWidth={1.75} className="pointer-events-none" />
+      <img src="/logo.png" alt="" className="pointer-events-none h-5 w-auto" />
       <span className="text-[13px] font-semibold uppercase tracking-[0.15em]">Noise Cam</span>
       <div
         className="ml-auto flex items-center gap-1.5 border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
