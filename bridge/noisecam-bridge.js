@@ -109,6 +109,10 @@ const keyframes = (globalThis.__cs2_dolly && Array.isArray(globalThis.__cs2_doll
 let enabledState = false;      // our view of campath enabled (toggled by enable/disable)
 let playMode = false;          // when true, the BRIDGE drives the camera along the path
 let playOffset = null;          // (continuous game time − quantized demo time), sampled once per enable
+let playGt0 = 0;               // render-clock value sampled at the moment playback (re)starts
+let playDt0 = 0;               // demo time sampled at that same moment (where the playhead begins)
+let playRate = 1;              // CAMERA traversal speed multiplier (independent of demo_timescale).
+                               //   1 = real-time, 0.5 = half-speed camera, etc. Set by preview.
 let easeMode = true;           // ease-in/out across the whole shot (smooth start/stop)
 let lastView = null;           // latest free-cam view {x,y,z,rX,rY,rZ,fov}
 
@@ -211,7 +215,10 @@ function previewShot(ts) {
 	enabledState = true;
 	playOffset = null; // re-sample the game↔demo offset after the seek
 	const speed = (typeof ts === 'number' && ts > 0) ? ts : 0.5;
+	playRate = speed;  // slow the CAMERA itself, not just the world
+	// demo_timescale slows the WORLD by the same factor so the two stay matched.
 	mirv.exec('mirv_campath enabled 0;demo_timescale ' + speed + ';demo_gototick ' + keyframes[0].tick + ';demo_resume');
+	send({ type: 'log', msg: '[preview] playing at ' + speed + '×' });
 	pushKeyframes();
 }
 
@@ -233,7 +240,7 @@ function handleIncoming(msg) {
 			// tick. Make sure native campath isn't also fighting for the view.
 			playMode = !!obj.on;
 			enabledState = !!obj.on;
-			if (playMode) playOffset = null; // re-sample the game↔demo time offset on each enable
+			if (playMode) { playOffset = null; playRate = 1; } // manual play = real-time camera
 			try { mirv.exec('mirv_campath enabled 0'); } catch (_) {}
 			pushKeyframes();
 			break;
@@ -344,8 +351,18 @@ mirv.events.cViewRenderSetupView.on(VIEW_ID, (e) => {
 		// continuousDemoTime = e.curTime − offset, which matches keyframe.time.
 		const gt = e.curTime;
 		const dt = (typeof mirv.getDemoTime === 'function') ? mirv.getDemoTime() : null;
-		if (playOffset === null && typeof gt === 'number' && typeof dt === 'number') playOffset = gt - dt;
-		let t = (typeof gt === 'number' && playOffset !== null) ? (gt - playOffset) : dt;
+		// Sample the start clocks once. The render clock (gt) advances at WALL-CLOCK
+		// rate during playback — it does NOT follow demo_timescale — so to actually
+		// slow the camera down we scale the elapsed render time by playRate. demo_
+		// timescale still slows the WORLD; playRate slows the CAMERA, matched in preview.
+		if (playOffset === null && typeof gt === 'number') {
+			playGt0 = gt;
+			playDt0 = (typeof dt === 'number') ? dt : (keyframes[0] ? keyframes[0].time : 0);
+			playOffset = gt - playDt0;
+		}
+		let t = (typeof gt === 'number' && playOffset !== null)
+			? (playDt0 + (gt - playGt0) * playRate)
+			: dt;
 		// Ease-in/out: remap the playhead's progress across the whole shot with a
 		// smoothstep so the camera accelerates from rest and decelerates to a stop.
 		if (easeMode && typeof t === 'number' && keyframes.length >= 2) {
@@ -372,7 +389,7 @@ const dollyCmd = new AdvancedfxConCommand((args) => {
 		case 'capture': captureKeyframe(); break;
 		case 'preview': previewShot(); break;
 		case 'clear':   mirv.exec('mirv_campath clear'); keyframes.length = 0; break;
-		case 'enable':  playMode = true; enabledState = true; playOffset = null; break;
+		case 'enable':  playMode = true; enabledState = true; playOffset = null; playRate = 1; break;
 		case 'disable': playMode = false; enabledState = false; break;
 		case 'draw':    mirv.exec('mirv_campath draw enabled 1;mirv_campath draw keyCam 1;mirv_campath draw keyAxis 1;mirv_campath draw keyIndex 16'); break;
 		case 'drawoff': mirv.exec('mirv_campath draw enabled 0'); break;
@@ -392,5 +409,5 @@ globalThis.__cs2_dolly = {
 	keyframes, // persisted so a reload keeps the editor-side keyframe list
 };
 
-mirv.message('[dolly] bridge v18 LOADED (spline on angle+fov, ease-in/out) — look for v18');
+mirv.message('[dolly] bridge v19 LOADED (adjustable preview speed via playRate) — look for v19');
 } // end wrapper block (keeps declarations out of the persistent global scope)
