@@ -8,13 +8,13 @@ can't even be ported, because CS2 changed the interface.
 
 | Tool / workflow | Real-time? | Works on CS2? | Notes |
 |---|---|---|---|
-| **Blender round-trip** (`afx-blender-scripts`, CamIO) | ❌ offline | ✅ yes | The de-facto "visual" editor: export → edit curves in Blender → re-import. Heavyweight, learning curve, not live. **Main precedent / competition.** |
-| `xNWP/HLAELiveLink` (Cinema 4D) | ✅ live | ❌ CS:GO only | Closest cousin: drives HLAE camera from C4D — but `mirv_pgl` (Source 1), C4D as UI, animate→push direction. |
-| `xNWP/HLAE-Server` (C#), `FlowingSPDG/HLAE-Server-GO`, `FIVESCUP/HLAE_Server_TypeScript` | n/a (transport) | ❌ CS:GO only | `mirv_pgl` wrappers. Reusable references, not editors. |
+| **Blender round-trip** (`afx-blender-scripts`, CamIO) | no (offline) | yes | The de-facto "visual" editor: export → edit curves in Blender → re-import. Heavyweight, learning curve, not live. **Main precedent / competition.** |
+| `xNWP/HLAELiveLink` (Cinema 4D) | yes | no (CS:GO only) | Closest cousin: drives HLAE camera from C4D — but `mirv_pgl` (Source 1), C4D as UI, animate→push direction. |
+| `xNWP/HLAE-Server` (C#), `FlowingSPDG/HLAE-Server-GO`, `FIVESCUP/HLAE_Server_TypeScript` | n/a (transport) | no (CS:GO only) | `mirv_pgl` wrappers. Reusable references, not editors. |
 | `dtugend/advancedfx-gui` | — | — | Maintainer's own Electron+native GUI experiment, **dormant since 2023**. |
 | `One-Studio/HLAE-Studio` | — | partial | HLAE+FFmpeg *manager*, not a campath editor. |
-| `mccadecortez/cs2-demo-parse-mirv` | — | ✅ (mirv-script) | Uses the CS2 JS engine — for AI demo parsing, not cameras. Proof the engine is usable in the wild. |
-| **A real-time visual campath editor for CS2** | ✅ | — | **Nobody. This project.** |
+| `mccadecortez/cs2-demo-parse-mirv` | — | yes (mirv-script) | Uses the CS2 JS engine — for AI demo parsing, not cameras. Proof the engine is usable in the wild. |
+| **A real-time visual campath editor for CS2** | yes | — | **Nobody. This project.** |
 
 ## Why it's greenfield (the moat)
 Every live-link tool was built on **`mirv_pgl`**, the CS:GO/Source-1 binary protocol.

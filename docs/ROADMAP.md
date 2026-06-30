@@ -1,11 +1,11 @@
 # Roadmap
 
-## Phase 0 — Protocol de-risk ✅ DONE
+## Phase 0 — Protocol de-risk DONE
 Verified the CS2 live link exists and is sufficient: HLAE's mirv-script engine gives
 camera read/override, demo tick/time, campath manipulation, entity data, cvar
 read/write, and custom console commands — all sanctioned, no injection. See HLAE-API.md.
 
-## Phase 1 — Hello-bridge ✅ BUILT (awaiting live test in CS2)
+## Phase 1 — Hello-bridge BUILT (awaiting live test in CS2)
 Prove the round trip end to end.
 - `bridge/noisecam-bridge.js` streams camera + demo tick to the editor every frame and
   runs `exec` commands sent back.
@@ -14,20 +14,20 @@ Prove the round trip end to end.
 - **TODO:** run it live in CS2 (`mirv_script_load` the bridge) and confirm the stream
   moves + a command (e.g. `demo_pause`) works. Check for `async ordering` warnings.
 
-## Phase 2 — Capture & apply ✅ BUILT (awaiting live test)
+## Phase 2 — Capture & apply BUILT (awaiting live test)
 The first interactive value.
-- ✅ `mirv_dolly` command registered (capture/clear/enable/disable/draw/drawoff) +
+- `mirv_dolly` command registered (capture/clear/enable/disable/draw/drawoff) +
   starter `cfg/dolly.cfg` binds. Capture uses HLAE's `mirv_campath add` (HLAE stores
   the correct quaternion — no manual euler→quat needed).
-- ✅ Server REPL: capture/list/clear/remove/enable/disable/draw/interp + raw exec.
-- ✅ Live keyframe list pushed to the editor on every campath change (`onChanged`).
-- ✅ Reload-safe bridge (`globalThis.__cs2_dolly.cleanup`); `connected!` log; `undefined` gone.
-- ✅ Server roundtrip verified on alt port (keyframe table + capture/remove commands).
+- Server REPL: capture/list/clear/remove/enable/disable/draw/interp + raw exec.
+- Live keyframe list pushed to the editor on every campath change (`onChanged`).
+- Reload-safe bridge (`globalThis.__cs2_dolly.cleanup`); `connected!` log; `undefined` gone.
+- Server roundtrip verified on alt port (keyframe table + capture/remove commands).
 - **TODO (live):** capture a few keyframes at different ticks in CS2, confirm the list
   populates, `enable`, unpause, watch the move play.
 - **Phase 2b (next):** auto-focus channel via camera→entity distance → `r_dof_override`.
 
-## Phase 3 — GUI app ✅ v1 BUILT (browser-based)
+## Phase 3 — GUI app v1 BUILT (browser-based)
 - `app/` — Node server serves the web UI (`app/public/`) and relays browser ↔ CS2.
 - Control panel: live readout, capture/enable/draw/clear, save/load, keyframe list
   (go/delete), transport (pause/resume/gototick/timescale), macros, raw console.
@@ -69,10 +69,10 @@ Streamline HLAE's recording so a shot goes campath → `.mp4` in a click.
 - **Recording (CS2-accurate):** in practice `mirv_streams` on CS2 is used for the
   **beauty pass** (+ **HUD separation** via alpha or white/black). True high-fps +
   native resolution come for free.
-  - ⚠ **No usable depth PASS on CS2** (Source-1 only) → depth/DoF is done **LIVE**:
+  - **No usable depth PASS on CS2** (Source-1 only) → depth/DoF is done **LIVE**:
     native **`r_dof_override`** (real-time, what the user uses) or **ReShade** CinematicDOF
     (depth-buffer access). For a depth *map* in post, no native pass → **AI depth (DA3)**.
-  - ⚠ **No per-entity green-screen / matte on CS2** (Source-1 only) → clean SUBJECT
+  - **No per-entity green-screen / matte on CS2** (Source-1 only) → clean SUBJECT
     isolation isn't native → **AI segmentation** (Phase 6).
   → CS2 native = beauty + HUD-sep + true fps + native res. **Depth-map and isolation are
     the two real gaps**, both filled by AI in post.
