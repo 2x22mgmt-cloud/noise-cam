@@ -107,7 +107,33 @@ const keyframes = (globalThis.__cs2_dolly && Array.isArray(globalThis.__cs2_doll
 	? globalThis.__cs2_dolly.keyframes
 	: [];          // editor-side list: {tick,time,pos,fov,ang:{roll}}
 let enabledState = false;      // our view of campath enabled (toggled by enable/disable)
+let playMode = false;          // when true, the BRIDGE drives the camera along the path
 let lastView = null;           // latest free-cam view {x,y,z,rX,rY,rZ,fov}
+
+// --- Path interpolation (bridge-driven playback) ----------------------------
+// Native campath can't drive the camera while our script holds the view hook, so
+// we interpolate the captured keyframes ourselves and return the view each frame.
+function lerp(a, b, f) { return a + (b - a) * f; }
+function lerpAngle(a, b, f) { const d = ((((b - a) % 360) + 540) % 360) - 180; return a + d * f; }
+function evalPath(tick) {
+	if (keyframes.length < 2 || typeof tick !== 'number') return null;
+	const ks = keyframes; // kept sorted by tick
+	if (tick < ks[0].tick || tick > ks[ks.length - 1].tick) return null; // outside the path
+	for (let i = 0; i < ks.length - 1; i++) {
+		const a = ks[i], b = ks[i + 1];
+		if (tick >= a.tick && tick <= b.tick) {
+			if (!a.pos || !b.pos || !a.ang || typeof a.ang.rX !== 'number' || typeof b.ang.rX !== 'number') return null;
+			const span = (b.tick - a.tick) || 1;
+			const f = (tick - a.tick) / span;
+			return {
+				x: lerp(a.pos.x, b.pos.x, f), y: lerp(a.pos.y, b.pos.y, f), z: lerp(a.pos.z, b.pos.z, f),
+				rX: lerpAngle(a.ang.rX, b.ang.rX, f), rY: lerpAngle(a.ang.rY, b.ang.rY, f), rZ: lerpAngle(a.ang.rZ, b.ang.rZ, f),
+				fov: lerp(a.fov, b.fov, f),
+			};
+		}
+	}
+	return null;
+}
 
 function demoTickNow() {
 	const t = (typeof mirv.getDemoTick === 'function') ? mirv.getDemoTick() : null;
@@ -131,7 +157,9 @@ function captureKeyframe() {
 		time: (typeof tick === 'number') ? tick / 64 : null,
 		pos: v ? { x: v.x, y: v.y, z: v.z } : null,
 		fov: v ? v.fov : null,
-		ang: v ? { roll: v.rZ } : null, // roll from the live euler rZ
+		// Store FULL euler (rX/rY/rZ) so the bridge can drive the camera itself on
+		// playback; `roll` (=rZ) is kept for the UI's roll column.
+		ang: v ? { rX: v.rX, rY: v.rY, rZ: v.rZ, roll: v.rZ } : null,
 	});
 	keyframes.sort((a, b) => ((a.tick ?? 0) - (b.tick ?? 0)));
 	pushKeyframes();
@@ -153,15 +181,14 @@ function handleIncoming(msg) {
 		case 'clear':   mirv.exec('mirv_campath clear'); keyframes.length = 0; pushKeyframes(); break;
 		case 'remove':  if (Number.isInteger(obj.index)) { keyframes.splice(obj.index, 1); mirv.exec('mirv_campath remove ' + obj.index); pushKeyframes(); } break;
 		case 'enable':
-			// Enable native campath playback. IMPORTANT (verified live in CS2 2.190):
-			//   - The campath only drives the camera while the demo is PLAYING (not paused).
-			//   - `mirv_campath offset current#0` (old behaviour) shifted the path's time
-			//     window PAST the playhead, so the camera never entered it. We reset the
-			//     offset to 0 so the path plays at the times it was captured.
-			//   Workflow: enable → seek to the first keyframe (Go) → play (demo_resume).
-			if (obj.on) mirv.exec('mirv_campath offset 0;mirv_campath enabled 1');
-			else mirv.exec('mirv_campath enabled 0');
+			// BRIDGE-DRIVEN playback. Native campath can't drive the camera while our
+			// script owns the view hook, so the bridge interpolates the keyframes and
+			// returns the view itself (see evalPath + the view listener). Works whether
+			// the demo is paused or playing — the camera sits on the path at the current
+			// tick. Make sure native campath isn't also fighting for the view.
+			playMode = !!obj.on;
 			enabledState = !!obj.on;
+			try { mirv.exec('mirv_campath enabled 0'); } catch (_) {}
 			pushKeyframes();
 			break;
 		case 'draw':
@@ -259,8 +286,18 @@ mirv.events.cViewRenderSetupView.on(VIEW_ID, (e) => {
 		wasConnected = false;
 	}
 
-	// We never override the view here — return undefined so native campath
-	// playback (mirv_campath enabled) controls the camera.
+	// Bridge-driven playback: when enabled, override the camera with the path view
+	// interpolated at the current demo tick. Returning a view here overrides the
+	// camera (same mechanism as HLAE's own mirv_script_view/fov snippets).
+	if (playMode) {
+		const t = (typeof mirv.getDemoTick === 'function') ? mirv.getDemoTick() : null;
+		const view = evalPath(t);
+		if (view) {
+			// Throttled breadcrumb so we can verify the camera tracks the path.
+			if (frame % 16 === 0) send({ type: 'log', msg: '[play] tick=' + t + ' pos=' + Math.round(view.x) + ',' + Math.round(view.y) + ',' + Math.round(view.z) + ' fov=' + Math.round(view.fov) });
+			return view; // <-- drives the camera along the dolly
+		}
+	}
 	return undefined;
 });
 
@@ -293,5 +330,5 @@ globalThis.__cs2_dolly = {
 	keyframes, // persisted so a reload keeps the editor-side keyframe list
 };
 
-mirv.message('[dolly] bridge v13 LOADED (enable=offset 0, list persists across reloads) — look for v13');
+mirv.message('[dolly] bridge v14 LOADED (BRIDGE-DRIVEN playback — bridge flies the camera itself) — look for v14');
 } // end wrapper block (keeps declarations out of the persistent global scope)
