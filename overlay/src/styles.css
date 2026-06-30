@@ -1,18 +1,27 @@
 @import "tailwindcss";
 
-/* Noise Cam overlay theme — semi-transparent dark "control room" glass that
-   floats over CS2. The window itself is transparent (Tauri); this paints the
-   panel surface. */
+/* Noise Cam overlay — heavy black & white, squared edges, amber accent for state.
+   System fonts only (offline-safe). */
 
 @theme {
-  --color-bg: #0e0f13;
-  --color-card: #161a21;
-  --color-line: #262c37;
-  --color-muted: #8b95a7;
-  --color-text: #e7ecf3;
-  --color-accent: #4ea1ff;
-  --color-accent-2: #2bd9a8;
-  --color-danger: #ff5c6c;
+  --color-bg: #0a0a0a;
+  --color-panel: #101012;
+  --color-line: #3a3a3a;
+  --color-line-soft: #242424;
+  --color-text: #f2f2f2;
+  --color-sub: #cfcfcf;
+  --color-muted: #7a7a7a;
+  --color-accent: #ffb020;
+  --color-danger: #ff5247;
+
+  /* squared edges everywhere */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
 }
 
 html,
@@ -22,8 +31,7 @@ body,
   margin: 0;
 }
 
-/* The page background MUST stay transparent so the rounded panel + the
-   always-on-top overlay effect read correctly over the game. */
+/* Window is transparent; this paints the near-opaque black panel over CS2. */
 body {
   background: transparent;
   color: var(--color-text);
@@ -34,25 +42,22 @@ body {
   overflow: hidden;
 }
 
-/* Thin custom scrollbar for the keyframe list, etc. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--color-line) transparent;
 }
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 *::-webkit-scrollbar-thumb {
   background: var(--color-line);
-  border-radius: 999px;
 }
 
 input {
   user-select: text;
 }
 
-/* Drag region (the custom titlebar). Buttons inside opt back out so clicks work. */
 [data-tauri-drag-region] {
   -webkit-app-region: drag;
 }
