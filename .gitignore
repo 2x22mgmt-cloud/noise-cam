@@ -16,3 +16,5 @@ desktop.ini
 *.cam
 out/
 recordings/
+release/
+overlay/icon-source.png
