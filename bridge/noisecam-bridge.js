@@ -108,6 +108,7 @@ const keyframes = (globalThis.__cs2_dolly && Array.isArray(globalThis.__cs2_doll
 	: [];          // editor-side list: {tick,time,pos,fov,ang:{roll}}
 let enabledState = false;      // our view of campath enabled (toggled by enable/disable)
 let playMode = false;          // when true, the BRIDGE drives the camera along the path
+let playOffset = null;          // (continuous game time − quantized demo time), sampled once per enable
 let lastView = null;           // latest free-cam view {x,y,z,rX,rY,rZ,fov}
 
 // --- Path interpolation (bridge-driven playback) ----------------------------
@@ -191,6 +192,7 @@ function handleIncoming(msg) {
 			// tick. Make sure native campath isn't also fighting for the view.
 			playMode = !!obj.on;
 			enabledState = !!obj.on;
+			if (playMode) playOffset = null; // re-sample the game↔demo time offset on each enable
 			try { mirv.exec('mirv_campath enabled 0'); } catch (_) {}
 			pushKeyframes();
 			break;
@@ -293,11 +295,18 @@ mirv.events.cViewRenderSetupView.on(VIEW_ID, (e) => {
 	// interpolated at the current demo tick. Returning a view here overrides the
 	// camera (same mechanism as HLAE's own mirv_script_view/fov snippets).
 	if (playMode) {
-		const t = (typeof mirv.getDemoTime === 'function') ? mirv.getDemoTime() : null;
+		// Build a CONTINUOUS demo time from the continuous render clock (e.curTime).
+		// getDemoTime()/getDemoTick() are both tick-quantized (64/s) → steppy in
+		// slow-mo. e.curTime is sub-tick. Sample the (game − demo) offset once, then
+		// continuousDemoTime = e.curTime − offset, which matches keyframe.time.
+		const gt = e.curTime;
+		const dt = (typeof mirv.getDemoTime === 'function') ? mirv.getDemoTime() : null;
+		if (playOffset === null && typeof gt === 'number' && typeof dt === 'number') playOffset = gt - dt;
+		const t = (typeof gt === 'number' && playOffset !== null) ? (gt - playOffset) : dt;
 		const view = evalPath(t);
 		if (view) {
-			// Throttled breadcrumb so we can verify the camera tracks the path.
-			if (frame % 16 === 0) send({ type: 'log', msg: '[play] t=' + (typeof t === 'number' ? t.toFixed(2) : t) + ' pos=' + Math.round(view.x) + ',' + Math.round(view.y) + ',' + Math.round(view.z) + ' fov=' + Math.round(view.fov) });
+			// Breadcrumb logs both clocks so we can confirm gt is continuous.
+			if (frame % 16 === 0) send({ type: 'log', msg: '[play] gt=' + (typeof gt === 'number' ? gt.toFixed(3) : gt) + ' dt=' + (typeof dt === 'number' ? dt.toFixed(3) : dt) + ' t=' + (typeof t === 'number' ? t.toFixed(3) : t) + ' pos=' + Math.round(view.x) + ',' + Math.round(view.y) + ',' + Math.round(view.z) });
 			return view; // <-- drives the camera along the dolly
 		}
 	}
@@ -333,5 +342,5 @@ globalThis.__cs2_dolly = {
 	keyframes, // persisted so a reload keeps the editor-side keyframe list
 };
 
-mirv.message('[dolly] bridge v15 LOADED (smooth playback — interpolate by continuous demo time) — look for v15');
+mirv.message('[dolly] bridge v16 LOADED (smooth playback via continuous render clock) — look for v16');
 } // end wrapper block (keeps declarations out of the persistent global scope)
