@@ -28,6 +28,7 @@ export type Cam = {
 export type Keyframe = {
   pos?: { x: number; y: number; z: number };
   fov?: number;
+  focus?: number | null;
   ang?: { pitch?: number; yaw?: number; roll?: number } | null;
   tick?: number;
   time?: number;
@@ -43,11 +44,13 @@ export type DemoInfo = {
   size_mb: number;
   modified: number;
 };
+export type PlayerInfo = { idx: number; name: string; team: number; alive: boolean };
 
 export type Bridge = {
   status: Status;
   cam: Cam | null;
   keyframes: Keyframes;
+  players: PlayerInfo[];
   log: LogLine[];
   send: (obj: Record<string, unknown>) => void;
   exec: (cmd: string) => void;
@@ -60,6 +63,7 @@ export function useBridge(): Bridge {
   const [status, setStatus] = useState<Status>({ hlae: false, text: "connecting…" });
   const [cam, setCam] = useState<Cam | null>(null);
   const [keyframes, setKeyframes] = useState<Keyframes>({ count: 0, enabled: false, items: [] });
+  const [players, setPlayers] = useState<PlayerInfo[]>([]);
   const [log, setLog] = useState<LogLine[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -125,6 +129,8 @@ export function useBridge(): Bridge {
       setCam(m);
     } else if (m.type === "keyframes") {
       setKeyframes({ count: m.count ?? 0, enabled: !!m.enabled, items: m.items || [] });
+    } else if (m.type === "players") {
+      setPlayers(Array.isArray(m.items) ? m.items : []);
     } else if (m.type === "status") {
       setStatus({ hlae: !!m.hlae, text: m.hlae ? "CS2 connected" : "waiting for CS2" });
     }
@@ -199,6 +205,6 @@ export function useBridge(): Bridge {
   }, []);
 
   return {
-    status, cam, keyframes, log, send, exec, listDemos, installBridge, bridgeInstalled,
+    status, cam, keyframes, players, log, send, exec, listDemos, installBridge, bridgeInstalled,
   };
 }

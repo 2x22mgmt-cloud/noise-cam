@@ -137,7 +137,8 @@ function BridgeGate({ b, onDismiss }: { b: Bridge; onDismiss: () => void }) {
   };
   const isInstalled = installed === true || install === "done";
   const checking = installed === null;
-  const recent = b.log.slice(-3);
+  // Only surface real messages (errors, relay notes) — not the "» command" echoes.
+  const recent = b.log.filter((l) => !l.msg.startsWith("»")).slice(-3);
   const Step = ({ n }: { n: number }) => (
     <span className="flex h-4 w-4 shrink-0 items-center justify-center bg-line text-[9px] font-bold text-text">
       {n}
@@ -433,6 +434,10 @@ function DemosTab({ b }: { b: Bridge }) {
 
 const PREVIEW_SPEEDS = [0.1, 0.25, 0.5, 1] as const;
 
+// Live lock-on (follow / bone cam) is shelved — CS2's demo entity data made it too
+// jittery/unreliable to ship. The bridge + UI code stays parked; flip this to revive.
+const SHOW_LOCKON = false;
+
 function PathTab({ b }: { b: Bridge }) {
   const [drawOn, setDrawOn] = useState(false);
   const [name, setName] = useState("myshot");
@@ -552,7 +557,7 @@ function KfRow({
   return (
     <div
       onClick={onSelect}
-      className={`grid cursor-pointer grid-cols-[20px_48px_1fr_auto] items-center gap-2 border-b border-line-soft px-2.5 py-2 text-[11px] last:border-b-0 ${
+      className={`grid cursor-pointer grid-cols-[18px_42px_1fr_auto_auto] items-center gap-2 border-b border-line-soft px-2.5 py-2 text-[11px] last:border-b-0 ${
         selected ? "border-l-2 border-l-accent bg-accent/[0.07]" : "hover:bg-white/[0.03]"
       }`}
     >
@@ -560,6 +565,12 @@ function KfRow({
       <span className="font-mono tabular-nums">{f(k.time, 2)}s</span>
       <span className="truncate font-mono text-muted">
         {f(p.x)}, {f(p.y)}, {f(p.z)}
+      </span>
+      <span
+        className="shrink-0 font-mono text-[10px] text-accent"
+        title="rack-focus distance on this keyframe"
+      >
+        {typeof k.focus === "number" && k.focus > 0 ? `◉${Math.round(k.focus)}` : ""}
       </span>
       <span className="flex gap-2.5">
         <button
@@ -680,9 +691,177 @@ function CameraTab({ b }: { b: Bridge }) {
           </button>
         </div>
       </div>
+
+      {SHOW_LOCKON && <FollowSection b={b} />}
     </div>
   );
 }
+
+function RangeRow({
+  lbl, val, set, min, max, step = 1, unit = "",
+}: {
+  lbl: string; val: number; set: (n: number) => void;
+  min: number; max: number; step?: number; unit?: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-[11px]">
+        <span className={label}>{lbl}</span>
+        <span className="font-mono text-text">{val}{unit}</span>
+      </div>
+      <input
+        type="range" min={min} max={max} step={step} value={val}
+        onChange={(e) => set(Number(e.target.value))}
+        className="w-full accent-[var(--color-accent)]"
+      />
+    </div>
+  );
+}
+
+/* ------------------------------------------------- live lock-on (follow cam) */
+function FollowSection({ b }: { b: Bridge }) {
+  const { players, send } = b;
+  const [target, setTarget] = useState<number | null>(null);
+  const [locked, setLocked] = useState(false);
+  const [mode, setMode] = useState<"third" | "eye">("third");
+  const [dist, setDist] = useState(120);
+  const [height, setHeight] = useState(14);
+  const [side, setSide] = useState(0);
+  const [smooth, setSmooth] = useState(60); // percent
+  const [fov, setFov] = useState(90);
+
+  const opts = { mode, dist, height, side, smooth: smooth / 100, fov };
+
+  // Pull the player list on mount, then refresh every 2s so alive/dead stays current.
+  useEffect(() => {
+    send({ type: "players" });
+    const id = setInterval(() => send({ type: "players" }), 2000);
+    return () => clearInterval(id);
+  }, [send]);
+
+  // Push live tweaks to the bridge while locked on.
+  useEffect(() => {
+    if (locked && target !== null) send({ type: "followSet", opts });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, dist, height, side, smooth, fov]);
+
+  const pick = (idx: number) => {
+    setTarget(idx);
+    setLocked(true);
+    send({ type: "follow", idx, opts });
+  };
+  const toggleLock = () => {
+    if (locked) {
+      setLocked(false);
+      send({ type: "followStop" });
+    } else if (target !== null) {
+      setLocked(true);
+      send({ type: "follow", idx: target, opts });
+    }
+  };
+
+  return (
+    <div className="space-y-2 border-t border-line pt-2.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-sub">
+          <Crosshair size={13} /> Live lock-on
+        </div>
+        <button
+          className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted transition hover:text-text"
+          onClick={() => send({ type: "players" })}
+        >
+          <RefreshCw size={11} /> Refresh
+        </button>
+      </div>
+
+      <div className="max-h-36 space-y-1 overflow-y-auto">
+        {players.map((p) => {
+          const on = target === p.idx;
+          const teamTag = p.team === 3 ? "CT" : p.team === 2 ? "T" : "–";
+          return (
+            <button
+              key={p.idx}
+              onClick={() => pick(p.idx)}
+              className={`flex w-full items-center gap-2 border px-2.5 py-2 text-left transition ${
+                on ? "border-accent! text-text" : "border-line text-sub hover:border-muted hover:text-text"
+              }`}
+            >
+              <span className={`w-4 shrink-0 text-[9px] font-bold ${p.team === 3 ? "text-sky-400" : p.team === 2 ? "text-amber-400" : "text-muted"}`}>
+                {teamTag}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[12px]">{p.name}</span>
+              {!p.alive && <span className="text-[9px] uppercase text-danger">dead</span>}
+              {on && (
+                <span className="text-[9px] uppercase tracking-wide text-accent">
+                  {locked ? "locked" : "picked"}
+                </span>
+              )}
+            </button>
+          );
+        })}
+        {players.length === 0 && (
+          <p className="px-0.5 py-3 text-center text-[11px] text-muted">
+            No players — load a demo, then Refresh.
+          </p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 border border-line">
+        {(["third", "eye"] as const).map((m, i) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={`py-1.5 text-[11px] font-medium uppercase tracking-wide transition ${
+              i === 0 ? "border-r border-line" : ""
+            } ${mode === m ? "bg-accent text-bg" : "text-sub hover:text-text"}`}
+          >
+            {m === "third" ? "3rd person" : "Eye / 1st"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "third" && (
+        <>
+          <RangeRow lbl="distance" val={dist} set={setDist} min={30} max={400} unit="u" />
+          <RangeRow lbl="height" val={height} set={setHeight} min={-30} max={90} unit="u" />
+          <RangeRow lbl="side" val={side} set={setSide} min={-90} max={90} unit="u" />
+        </>
+      )}
+      <RangeRow lbl="smoothing" val={smooth} set={setSmooth} min={0} max={100} step={5} unit="%" />
+
+      <div>
+        <div className={`mb-1 ${label}`}>lens (focal length)</div>
+        <div className="grid grid-cols-5 gap-1">
+          {[18, 24, 35, 50, 85].map((mm) => {
+            const f2 = +focalToFov(mm).toFixed(1);
+            const on = Math.abs(fov - f2) < 0.5;
+            return (
+              <button
+                key={mm}
+                className={`${btn} ${on ? btnActive : ""}`}
+                onClick={() => setFov(f2)}
+              >
+                {mm}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <button
+        onClick={toggleLock}
+        disabled={target === null}
+        className={`flex w-full items-center justify-center gap-2 border py-2.5 text-[12px] font-semibold uppercase tracking-wide transition disabled:opacity-40 ${
+          locked ? "border-accent! bg-accent text-bg" : "border-muted text-text hover:border-text"
+        }`}
+      >
+        <Crosshair size={14} strokeWidth={2.5} />
+        {target === null ? "Pick a player" : locked ? "Locked — tap to release" : "Lock on"}
+      </button>
+    </div>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
@@ -703,6 +882,13 @@ function DofTab({ b }: { b: Bridge }) {
   const p = computeDof(focusN, fstop, focalMm);
   const r = (n: number) => Math.round(n);
   const farTxt = (n: number) => (n >= 100000 ? "∞" : String(r(n)));
+
+  // Keep the bridge in sync with focus + aperture, so captured keyframes grab this
+  // focus and playback can rack it along the path.
+  useEffect(() => {
+    b.send({ type: "dof", focus: focusN, fstop });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusN, fstop]);
 
   // Live DoF — push the override planes as the slider / aperture move so focus
   // racks in real time. Throttled (~25/s) with a trailing send, so dragging
@@ -780,6 +966,14 @@ function DofTab({ b }: { b: Bridge }) {
         <button className={btn} onClick={disableDof}>DoF off</button>
       </div>
 
+      <button
+        className={`${btn} w-full`}
+        onClick={() => b.send({ type: "setKfFocus", focus: focusN })}
+        title="Store this focus distance on the keyframe selected in the Path tab"
+      >
+        <Route size={13} /> Set focus on selected keyframe
+      </button>
+
       <div className="border border-line p-2.5 font-mono text-[11px] text-muted">
         <div className={`mb-1 ${label} px-0`}>
           @ {fmtFocal(b.cam?.view?.fov ?? focalToFov(focalMm))} · f/{fstop}
@@ -790,8 +984,11 @@ function DofTab({ b }: { b: Bridge }) {
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted">
-        Drag the slider and focus racks live in-game. Set where the subject is
-        sharp and how shallow the look is — planes are computed from lens optics.
+        Drag the slider and focus racks live in-game. The focus distance is{" "}
+        <span className="text-sub">saved into each keyframe you capture</span>, so on
+        playback the focus pulls along the path (aperture stays fixed for the shot).
+        To retune one point: select it in the Path tab, set focus here, hit{" "}
+        <span className="text-sub">Set focus on selected keyframe</span>.
       </p>
     </div>
   );
